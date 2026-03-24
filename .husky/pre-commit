@@ -1,0 +1,15 @@
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+
+if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "dev" ]; then
+  exit 0
+fi
+
+if ! echo "$BRANCH_NAME" | grep -Eq 'SCRUM-[0-9]+'; then
+  echo ""
+  echo "ERRO: Nome de branch fora do padrão!"
+  echo "Sua branch atual é: $BRANCH_NAME"
+  echo "O nome da branch deve conter o ticket da tarefa."
+  echo "Exemplo correto: SCRUM-123-descricao-da-tarefa"
+  echo ""
+  exit 1
+fi
