@@ -1,3 +1,7 @@
+"""Configuracao centralizada do sistema ASG.
+Carrega valores do arquivo .env sem necessidade de alterar codigo-fonte.
+"""
+
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
