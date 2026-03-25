@@ -1,0 +1,32 @@
+# Dados coletados (grandes demais para git)
+dados/*.json
+!dados/resumo_coleta.json
+scripts/dados/*.json
+!scripts/dados/resumo_coleta.json
+dados/prodes_desmatamento_sp.json
+
+
+# Python
+__pycache__/
+venv/
+*.pyc
+*.pyo
+
+# Modelos treinados (regeneraveis)
+modelos_salvos/*.pkl
+
+# Ambiente
+.env
+.venv/
+.claude
+
+# Logs
+logs/*.log
+logs/*.jsonl
+
+# IDE
+.vscode/
+.idea/
+
+# Docker volumes
+pgdata/
