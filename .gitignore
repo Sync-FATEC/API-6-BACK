@@ -30,3 +30,6 @@ logs/*.jsonl
 
 # Docker volumes
 pgdata/
+
+# Node
+node_modules/
