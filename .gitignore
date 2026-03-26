@@ -30,9 +30,3 @@ logs/*.jsonl
 
 # Docker volumes
 pgdata/
-<<<<<<< HEAD
-
-# Node
-node_modules/
-=======
->>>>>>> joao/entrega-4/ingestao-etl

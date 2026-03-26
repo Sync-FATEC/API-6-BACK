@@ -1,5 +1,3 @@
-"""Queries ao banco: busca vetorial, espacial e estruturada."""
-
 from asg_sistema.db.conexao import executar_consulta
 
 
