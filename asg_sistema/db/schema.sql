@@ -122,6 +122,30 @@ CREATE TABLE IF NOT EXISTS comunidades_quilombolas (
 
 CREATE INDEX IF NOT EXISTS idx_quilombola_municipio ON comunidades_quilombolas(municipio);
 
+-- SICAR - Cadastro Ambiental Rural (SP)
+CREATE TABLE IF NOT EXISTS sicar_imoveis (
+    id SERIAL PRIMARY KEY,
+    fonte_id INTEGER REFERENCES fontes(id),
+    cod_imovel VARCHAR(254),
+    cod_tema VARCHAR(254),
+    nom_tema VARCHAR(254),
+    ind_status VARCHAR(10),
+    ind_tipo VARCHAR(10),
+    des_condic VARCHAR(254),
+    municipio VARCHAR(254),
+    cod_estado VARCHAR(5),
+    num_area DOUBLE PRECISION,
+    mod_fiscal DOUBLE PRECISION,
+    dat_criacao VARCHAR(20),
+    dat_atualizacao VARCHAR(20),
+    geom GEOMETRY(Geometry, 4674)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sicar_geom ON sicar_imoveis USING GIST(geom);
+CREATE INDEX IF NOT EXISTS idx_sicar_municipio ON sicar_imoveis(municipio);
+CREATE INDEX IF NOT EXISTS idx_sicar_cod_imovel ON sicar_imoveis(cod_imovel);
+CREATE INDEX IF NOT EXISTS idx_sicar_status ON sicar_imoveis(ind_status);
+
 -- Corpus textualizado + embeddings para busca semantica
 CREATE TABLE IF NOT EXISTS corpus_asg (
     id SERIAL PRIMARY KEY,
