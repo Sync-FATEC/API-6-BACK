@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from asg_sistema.api import rotas_consulta, rotas_dados, rotas_geo
+from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_geo
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -41,6 +41,7 @@ app.add_middleware(
 )
 
 app.include_router(rotas_consulta.router, prefix="/api", tags=["Consulta"])
+app.include_router(rotas_banco.router, prefix="/api", tags=["Banco de dados"])
 app.include_router(rotas_dados.router, prefix="/api/dados", tags=["Dados"])
 app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
 
