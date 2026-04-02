@@ -46,6 +46,18 @@ class ClassificadorIntencao:
         confianca = float(proba[idx])
         return intencao, confianca
 
+    def classificar_multiplo(self, texto: str, limiar: float = 0.10) -> list[tuple[str, float]]:
+        """Retorna todas as intenções com probabilidade acima do limiar, ordenadas."""
+        texto_limpo = self.preprocessador.preprocessar(texto)["texto_limpo"]
+        proba = self.pipeline.predict_proba([texto_limpo])[0]
+        resultados = []
+        for idx, p in enumerate(proba):
+            if p >= limiar:
+                intencao = self.label_encoder.inverse_transform([idx])[0]
+                resultados.append((intencao, float(p)))
+        resultados.sort(key=lambda x: x[1], reverse=True)
+        return resultados
+
     def salvar(self, diretorio: Path):
         diretorio.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.pipeline, diretorio / "classificador_intencao.pkl")
