@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 def carregar_tudo(caminho_dados: Path):
     logger.info("Iniciando carga de dados ASG...")
+    _garantir_coluna_uf_corpus()
     _carregar_queimadas(caminho_dados / "queimadas_focos_sp.json")
     _carregar_funai(caminho_dados / "funai_terras_indigenas_sp.json")
     _carregar_deter(caminho_dados / "deter_desmatamento_sp.json")
@@ -49,19 +50,43 @@ def _inserir_fonte(metadados: dict) -> int:
 
 
 def _inserir_corpus(doc: dict):
+    uf_sigla = _normalizar_uf(doc.get("uf_sigla"))
+    if not _eh_sp(uf_sigla):
+        raise ValueError("uf_sigla ausente ou invalida no corpus_asg (esperado: SP)")
+
     executar_sql(
         """INSERT INTO corpus_asg
-        (fonte, tipo_registro, municipio, data_referencia, texto, metadados_json)
-        VALUES (:fonte, :tipo, :municipio, :data_ref, :texto, :meta)""",
+        (fonte, tipo_registro, uf_sigla, municipio, data_referencia, texto, metadados_json)
+        VALUES (:fonte, :tipo, :uf_sigla, :municipio, :data_ref, :texto, :meta)""",
         {
             "fonte": doc["fonte"],
             "tipo": doc["tipo_registro"],
+            "uf_sigla": uf_sigla,
             "municipio": doc["municipio"],
             "data_ref": doc["data_referencia"],
             "texto": doc["texto"],
             "meta": json.dumps(doc["metadados_json"], ensure_ascii=False),
         },
     )
+
+
+def _garantir_coluna_uf_corpus():
+    executar_sql("ALTER TABLE corpus_asg ADD COLUMN IF NOT EXISTS uf_sigla VARCHAR(5)")
+    executar_sql("UPDATE corpus_asg SET uf_sigla = 'SP' WHERE uf_sigla IS NULL OR TRIM(uf_sigla) = ''")
+    executar_sql("ALTER TABLE corpus_asg ALTER COLUMN uf_sigla DROP DEFAULT")
+    executar_sql("ALTER TABLE corpus_asg ALTER COLUMN uf_sigla SET NOT NULL")
+    executar_sql("CREATE INDEX IF NOT EXISTS idx_corpus_uf_sigla ON corpus_asg(uf_sigla)")
+
+
+def _normalizar_uf(valor: str | None) -> str:
+    if not valor:
+        return ""
+    return str(valor).strip().upper()
+
+
+def _eh_sp(valor: str | None) -> bool:
+    uf = _normalizar_uf(valor)
+    return uf in {"SP", "SAO PAULO", "SÃO PAULO"}
 
 
 def _carregar_queimadas(caminho: Path):
@@ -76,7 +101,11 @@ def _carregar_queimadas(caminho: Path):
     registros = dados.get("dados", [])
     logger.info("Carregando %d focos de queimada...", len(registros))
 
+    inseridos = 0
     for i, reg in enumerate(registros):
+        if not _eh_sp(reg.get("estado")):
+            continue
+
         lat = _para_float(reg.get("latitude"))
         lon = _para_float(reg.get("longitude"))
 
@@ -96,7 +125,7 @@ def _carregar_queimadas(caminho: Path):
                 "dt": reg.get("data_hora"),
                 "sat": reg.get("satelite", ""),
                 "mun": reg.get("municipio", ""),
-                "est": reg.get("estado", ""),
+                "est": _normalizar_uf(reg.get("estado")),
                 "bio": reg.get("bioma", ""),
                 "frp": _para_float(reg.get("frp")),
                 "risco": _para_float(reg.get("risco_fogo")),
@@ -105,12 +134,14 @@ def _carregar_queimadas(caminho: Path):
         )
 
         doc = textualizar_queimada(reg)
+        doc["uf_sigla"] = "SP"
         _inserir_corpus(doc)
+        inseridos += 1
 
         if (i + 1) % 2000 == 0:
             logger.info("  %d/%d queimadas inseridas", i + 1, len(registros))
 
-    logger.info("Queimadas: %d registros carregados", len(registros))
+    logger.info("Queimadas: %d registros carregados", inseridos)
 
 
 def _carregar_funai(caminho: Path):
@@ -125,8 +156,11 @@ def _carregar_funai(caminho: Path):
     features = dados.get("features", [])
     logger.info("Carregando %d terras indigenas...", len(features))
 
+    inseridos = 0
     for feat in features:
         props = feat.get("properties", {})
+        if not _eh_sp(props.get("uf_sigla", "SP")):
+            continue
         geom_json = json.dumps(feat.get("geometry", {}))
 
         executar_sql(
@@ -140,7 +174,7 @@ def _carregar_funai(caminho: Path):
                 "nome": props.get("terrai_nome", ""),
                 "etnia": props.get("etnia_nome", ""),
                 "mun": props.get("municipio_nome", ""),
-                "uf": props.get("uf_sigla", "SP"),
+                "uf": _normalizar_uf(props.get("uf_sigla", "SP")),
                 "area": props.get("superficie_perimetro_ha"),
                 "fase": props.get("fase_ti", ""),
                 "mod": props.get("modalidade_ti", ""),
@@ -150,9 +184,11 @@ def _carregar_funai(caminho: Path):
 
         bbox = feat.get("bbox")
         doc = textualizar_terra_indigena(props, bbox=bbox)
+        doc["uf_sigla"] = "SP"
         _inserir_corpus(doc)
+        inseridos += 1
 
-    logger.info("FUNAI: %d registros carregados", len(features))
+    logger.info("FUNAI: %d registros carregados", inseridos)
 
 
 def _carregar_deter(caminho: Path):
@@ -167,8 +203,11 @@ def _carregar_deter(caminho: Path):
     features = dados.get("features", [])
     logger.info("Carregando %d alertas de desmatamento...", len(features))
 
+    inseridos = 0
     for feat in features:
         props = feat.get("properties", {})
+        if not _eh_sp(props.get("uf", "SP")):
+            continue
         geom = feat.get("geometry")
         geom_json = json.dumps(geom) if geom else None
 
@@ -185,7 +224,7 @@ def _carregar_deter(caminho: Path):
                 "fid": fonte_id,
                 "cls": props.get("classname", ""),
                 "mun": props.get("municipality", ""),
-                "uf": props.get("uf", "SP"),
+                "uf": _normalizar_uf(props.get("uf", "SP")),
                 "dt": props.get("view_date"),
                 "sensor": props.get("sensor", ""),
                 "sat": props.get("satellite", ""),
@@ -197,9 +236,11 @@ def _carregar_deter(caminho: Path):
         )
 
         doc = textualizar_desmatamento(props)
+        doc["uf_sigla"] = "SP"
         _inserir_corpus(doc)
+        inseridos += 1
 
-    logger.info("DETER: %d registros carregados", len(features))
+    logger.info("DETER: %d registros carregados", inseridos)
 
 
 def _carregar_ucs(caminho: Path):
@@ -214,7 +255,12 @@ def _carregar_ucs(caminho: Path):
     registros = dados.get("dados", [])
     logger.info("Carregando %d unidades de conservacao...", len(registros))
 
+    inseridos = 0
     for reg in registros:
+        uf = reg.get("UF", reg.get("uf", ""))
+        if not _eh_sp(uf):
+            continue
+
         executar_sql(
             """INSERT INTO unidades_conservacao
             (fonte_id, nome, categoria, grupo, esfera, uf, municipio, area_ha)
@@ -225,7 +271,7 @@ def _carregar_ucs(caminho: Path):
                 "cat": reg.get("CATEGORI3", reg.get("categoria", "")),
                 "grupo": reg.get("GRUPO", reg.get("grupo", "")),
                 "esfera": reg.get("ESFERA", reg.get("esfera", "")),
-                "uf": reg.get("UF", reg.get("uf", "")),
+                "uf": _normalizar_uf(uf),
                 "mun": reg.get("MUNICIPIO", reg.get("municipio", "")),
                 "area": _para_float(
                     reg.get("AREA_HA", reg.get("area_ha"))
@@ -234,9 +280,11 @@ def _carregar_ucs(caminho: Path):
         )
 
         doc = textualizar_unidade_conservacao(reg)
+        doc["uf_sigla"] = "SP"
         _inserir_corpus(doc)
+        inseridos += 1
 
-    logger.info("UCs: %d registros carregados", len(registros))
+    logger.info("UCs: %d registros carregados", inseridos)
 
 
 def _carregar_prodes(caminho: Path):
@@ -253,8 +301,12 @@ def _carregar_prodes(caminho: Path):
 
     AMOSTRA_CORPUS = 50  # insere no corpus 1 a cada N registros
 
+    inseridos = 0
+    corpus_inseridos = 0
     for i, feat in enumerate(features):
         props = feat.get("properties", {})
+        if not _eh_sp(props.get("state", "SP")):
+            continue
         geom = feat.get("geometry")
         geom_json = json.dumps(geom) if geom else None
 
@@ -270,7 +322,7 @@ def _carregar_prodes(caminho: Path):
             {
                 "fid": fonte_id,
                 "uid": props.get("uid"),
-                "estado": props.get("state", "SP"),
+                "estado": _normalizar_uf(props.get("state", "SP")),
                 "cls_princ": props.get("main_class", ""),
                 "cls_nome": props.get("class_name", ""),
                 "dt": props.get("image_date"),
@@ -282,16 +334,18 @@ def _carregar_prodes(caminho: Path):
                 "geom": geom_json,
             },
         )
+        inseridos += 1
 
         if i % AMOSTRA_CORPUS == 0:
             doc = textualizar_prodes(props)
+            doc["uf_sigla"] = "SP"
             _inserir_corpus(doc)
+            corpus_inseridos += 1
 
         if (i + 1) % 5000 == 0:
             logger.info("  %d/%d PRODES inseridos", i + 1, len(features))
 
-    corpus_total = len(features) // AMOSTRA_CORPUS + 1
-    logger.info("PRODES: %d registros na tabela, %d amostras no corpus", len(features), corpus_total)
+    logger.info("PRODES: %d registros na tabela, %d amostras no corpus", inseridos, corpus_inseridos)
 
 
 def _carregar_palmares(caminho: Path):
@@ -306,9 +360,14 @@ def _carregar_palmares(caminho: Path):
     registros = dados.get("dados", [])
     logger.info("Carregando %d comunidades quilombolas...", len(registros))
 
+    inseridos = 0
     for reg in registros:
         municipio = reg.get("MUNICÍPIO", reg.get("MUNICIPIO", ""))
         ano_str = reg.get("ANO CERTIFICAÇÃO", reg.get("ANO CERTIFICACAO", ""))
+        uf = reg.get(" ", reg.get("UF", "SP")).strip()
+        if not _eh_sp(uf):
+            continue
+
         ano = None
         try:
             ano = int(ano_str) if ano_str and str(ano_str).strip() else None
@@ -323,7 +382,7 @@ def _carregar_palmares(caminho: Path):
             {
                 "fid": fonte_id,
                 "mun": municipio,
-                "uf": reg.get(" ", reg.get("UF", "SP")).strip(),
+                "uf": _normalizar_uf(uf),
                 "com": reg.get("COMUNIDADE", ""),
                 "ibge": reg.get("CÓDIGO DO IBGE", reg.get("CODIGO DO IBGE", "")),
                 "proc": reg.get("Nº PROCESSO NA FCP", ""),
@@ -334,9 +393,11 @@ def _carregar_palmares(caminho: Path):
         )
 
         doc = textualizar_quilombola(reg)
+        doc["uf_sigla"] = "SP"
         _inserir_corpus(doc)
+        inseridos += 1
 
-    logger.info("Palmares: %d registros carregados", len(registros))
+    logger.info("Palmares: %d registros carregados", inseridos)
 
 
 def _para_float(valor) -> float | None:

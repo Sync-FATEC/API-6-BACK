@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS terras_indigenas (
     nome VARCHAR(200),
     etnia VARCHAR(300),
     municipio VARCHAR(200),
-    uf VARCHAR(5),
+    uf VARCHAR(5) CHECK (UPPER(TRIM(uf)) = 'SP'),
     area_ha DOUBLE PRECISION,
     fase VARCHAR(100),
     modalidade VARCHAR(100),
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS desmatamento_alertas (
     fonte_id INTEGER REFERENCES fontes(id),
     classe VARCHAR(100),
     municipio VARCHAR(200),
-    uf VARCHAR(5),
+    uf VARCHAR(5) CHECK (UPPER(TRIM(uf)) = 'SP'),
     data_avistamento DATE,
     sensor VARCHAR(50),
     satelite VARCHAR(50),
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS prodes_desmatamento (
     id SERIAL PRIMARY KEY,
     fonte_id INTEGER REFERENCES fontes(id),
     uid INTEGER,
-    estado VARCHAR(5),
+    estado VARCHAR(5) CHECK (UPPER(TRIM(estado)) = 'SP'),
     classe_principal VARCHAR(50),
     classe_nome VARCHAR(50),
     data_imagem DATE,
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS comunidades_quilombolas (
     id SERIAL PRIMARY KEY,
     fonte_id INTEGER REFERENCES fontes(id),
     municipio VARCHAR(200),
-    uf VARCHAR(5),
+    uf VARCHAR(5) CHECK (UPPER(TRIM(uf)) = 'SP'),
     comunidade VARCHAR(300),
     codigo_ibge VARCHAR(20),
     processo_fcp VARCHAR(100),
@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS corpus_asg (
     id SERIAL PRIMARY KEY,
     fonte VARCHAR(100) NOT NULL,
     tipo_registro VARCHAR(100),
+    uf_sigla VARCHAR(5) NOT NULL,
     municipio TEXT,
     data_referencia DATE,
     texto TEXT NOT NULL,
@@ -161,5 +162,6 @@ CREATE TABLE IF NOT EXISTS corpus_asg (
 );
 
 CREATE INDEX IF NOT EXISTS idx_corpus_fonte ON corpus_asg(fonte);
+CREATE INDEX IF NOT EXISTS idx_corpus_uf_sigla ON corpus_asg(uf_sigla);
 CREATE INDEX IF NOT EXISTS idx_corpus_municipio ON corpus_asg(municipio);
 CREATE INDEX IF NOT EXISTS idx_corpus_data ON corpus_asg(data_referencia);
