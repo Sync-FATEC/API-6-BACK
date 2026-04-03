@@ -1,5 +1,7 @@
 # Dados coletados (grandes demais para git)
 dados/*.json
+dados/SP_AREA_IMOVEL.zip
+dados/geojson/
 !dados/resumo_coleta.json
 scripts/dados/*.json
 !scripts/dados/resumo_coleta.json
