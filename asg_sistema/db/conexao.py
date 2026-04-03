@@ -34,3 +34,9 @@ def executar_consulta(sql: str, params: dict | None = None) -> list[dict]:
         linhas = [dict(zip(colunas, row)) for row in resultado.fetchall()]
         conn.commit()
         return linhas
+
+
+def executar_sql_many(sql: str, params_list: list[dict]):
+    with engine.connect() as conn:
+        conn.execute(text(sql), params_list)
+        conn.commit()

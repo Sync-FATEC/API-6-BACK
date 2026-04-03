@@ -17,6 +17,7 @@ MAPA_INTENCAO_FONTE = {
     "consultar_unidade_conservacao": "icmbio",
     "consultar_quilombola": "palmares",
     "consultar_prodes": "prodes",
+    "consultar_imovel_rural": "sicar",
     "resumo_municipal": None,
 }
 

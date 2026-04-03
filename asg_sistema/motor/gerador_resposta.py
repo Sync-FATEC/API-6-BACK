@@ -10,6 +10,7 @@ MAPA_FONTE_NOME = {
     "icmbio": "MMA/ICMBio",
     "palmares": "Fundação Cultural Palmares",
     "prodes": "INPE/PRODES",
+    "sicar": "SICAR/CAR",
 }
 
 
@@ -104,6 +105,7 @@ class GeradorResposta:
             "consultar_unidade_conservacao": f"Foram encontradas {total} unidades de conservação{local}.",
             "consultar_quilombola": f"Foram encontradas {total} comunidades quilombolas{local}.",
             "consultar_prodes": f"Foram encontrados {total} registros de desmatamento PRODES{local}.",
+            "consultar_imovel_rural": f"Foram encontrados {total} imóveis rurais cadastrados no CAR{local}.",
             "resumo_municipal": f"Foram encontrados {total} registros ASG{local}.",
         }
         return resumos.get(intencao, f"Foram encontrados {total} resultados{local}.")
@@ -152,6 +154,7 @@ class GeradorResposta:
         municipios_sem_geo = set()
         uids_prodes = []
         deter_resultados = []
+        cods_sicar = []
         for r in resultados:
             fonte = r.get("fonte", "")
             if fonte == "funai":
@@ -170,6 +173,11 @@ class GeradorResposta:
                     uids_prodes.append(str(uid))
             elif fonte == "deter":
                 deter_resultados.append(r)
+            elif fonte == "sicar":
+                meta = self._parse_metadados(r)
+                cod = meta.get("cod_imovel")
+                if cod:
+                    cods_sicar.append(cod)
 
         geometrias_ti = {}
         if nomes_ti:
@@ -187,6 +195,10 @@ class GeradorResposta:
         if deter_resultados:
             geometrias_deter = self._buscar_geometrias_deter(deter_resultados)
 
+        geometrias_sicar = {}
+        if cods_sicar:
+            geometrias_sicar = self._buscar_geometrias_sicar(cods_sicar)
+
         # rastreia coordenadas já usadas para aplicar spiral offset em pontos idênticos
         _coord_count: dict = {}
 
@@ -201,6 +213,8 @@ class GeradorResposta:
                     geometry = geometrias_ti[chave]
                 elif meta["nome"] + "_" in geometrias_ti:
                     geometry = geometrias_ti[meta["nome"] + "_"]
+            elif fonte == "sicar" and meta.get("cod_imovel"):
+                geometry = geometrias_sicar.get(meta["cod_imovel"])
             elif fonte == "prodes" and meta.get("uid"):
                 uid_str = str(meta["uid"])
                 if uid_str in centroides_prodes:
@@ -377,6 +391,26 @@ class GeradorResposta:
                         geometrias[chave] = _json.loads(row["geometry"])
             except Exception:
                 pass
+        return geometrias
+
+    def _buscar_geometrias_sicar(self, cods: list[str]) -> dict:
+        """Retorna {cod_imovel: geometry_dict} com polígono do imóvel rural."""
+        import json as _json
+        from asg_sistema.db.conexao import executar_consulta
+        geometrias = {}
+        try:
+            placeholders = ",".join(f":c{i}" for i in range(len(cods)))
+            params = {f"c{i}": c for i, c in enumerate(cods)}
+            rows = executar_consulta(
+                f"SELECT cod_imovel, ST_AsGeoJSON(geom) as geometry "
+                f"FROM sicar_imoveis WHERE cod_imovel IN ({placeholders}) AND geom IS NOT NULL",
+                params,
+            )
+            for row in rows:
+                if row.get("geometry"):
+                    geometrias[row["cod_imovel"]] = _json.loads(row["geometry"])
+        except Exception:
+            pass
         return geometrias
 
     def _parse_metadados(self, registro: dict) -> dict:
