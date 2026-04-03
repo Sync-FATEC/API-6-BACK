@@ -1,5 +1,3 @@
-"""Queries ao banco: busca vetorial, espacial e estruturada."""
-
 from asg_sistema.db.conexao import executar_consulta
 
 
@@ -24,7 +22,10 @@ def busca_vetorial(
         filtros.append("fonte = :fonte")
         params["fonte"] = fonte
     if municipio:
-        filtros.append("municipio ILIKE :municipio")
+        if fonte == "icmbio" or (fontes and "icmbio" in fontes):
+            filtros.append("(municipio ILIKE :municipio OR texto ILIKE :municipio)")
+        else:
+            filtros.append("municipio ILIKE :municipio")
         params["municipio"] = f"%{municipio}%"
     if data_inicio:
         filtros.append("data_referencia >= :data_inicio")

@@ -1,0 +1,182 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Segoe UI', sans-serif;
+    background: #f0f2f5;
+    color: #333;
+}
+
+header {
+    background: #1a5632;
+    color: white;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: 56px;
+    flex-shrink: 0;
+}
+header h1 { font-size: 1.4rem; }
+header p { font-size: 0.85rem; opacity: 0.85; }
+
+main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: calc(100vh - 56px);
+    overflow: hidden;
+}
+
+#chat-panel {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #ddd;
+    background: white;
+    height: 100%;
+    overflow: hidden;
+}
+
+#mensagens {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.msg {
+    padding: 10px 14px;
+    border-radius: 8px;
+    max-width: 90%;
+    line-height: 1.5;
+    font-size: 0.9rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    flex-shrink: 0;
+}
+.msg.usuario {
+    background: #dcf8c6;
+    align-self: flex-end;
+}
+.msg.sistema {
+    background: #eef;
+    align-self: flex-start;
+}
+.msg .resumo { font-weight: 600; margin-bottom: 6px; }
+.msg .fontes { font-size: 0.8rem; color: #666; margin-top: 6px; }
+.msg .stats { font-size: 0.8rem; color: #555; margin-top: 4px; }
+
+.exemplos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.exemplos button {
+    background: #dde;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.exemplos button:hover { background: #ccd; }
+
+#form-pergunta {
+    display: flex;
+    padding: 12px;
+    gap: 8px;
+    border-top: 1px solid #ddd;
+    flex-shrink: 0;
+}
+#input-pergunta {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    min-width: 0;
+}
+#form-pergunta button {
+    padding: 10px 20px;
+    background: #1a5632;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+#mapa-panel {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+}
+#mapa { width: 100%; height: 100%; }
+
+@media (max-width: 768px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+}
+
+/* Toggle mapa no chat */
+.mapa-toggle { margin-top: 8px; }
+.btn-mostrar-mapa {
+    background: #1a5632; color: white; border: none;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    font-size: 0.82rem; font-weight: 600; transition: background 0.2s;
+}
+.btn-mostrar-mapa:hover { background: #14442a; }
+.btn-mapa-ativo { background: #2d7a4f; }
+
+/* Botao limpar mapa */
+.btn-limpar-mapa {
+    background: rgba(0,0,0,0.65); color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 6px 12px; border-radius: 4px;
+    cursor: pointer; font-size: 0.8rem; font-weight: 600;
+}
+.btn-limpar-mapa:hover { background: rgba(0,0,0,0.85); }
+
+/* Legenda */
+.legenda-mapa {
+    background: rgba(0,0,0,0.75); color: white;
+    padding: 10px 14px; border-radius: 6px;
+    font-size: 0.82rem; line-height: 1.6;
+}
+.legenda-mapa strong { display: block; margin-bottom: 4px; font-size: 0.85rem; }
+.legenda-item { display: flex; align-items: center; gap: 6px; }
+.legenda-cor {
+    display: inline-block; width: 14px; height: 14px;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,0.5);
+}
+
+/* Popup customizado */
+.popup-asg .leaflet-popup-content-wrapper {
+    border-radius: 8px; box-shadow: 0 3px 14px rgba(0,0,0,0.35);
+}
+.popup-asg .leaflet-popup-content { margin: 8px 10px !important; }
+.popup-content { font-size: 0.82rem; line-height: 1.3; }
+.popup-header { margin-bottom: 2px; padding-bottom: 2px; border-bottom: 1px solid #eee; }
+.popup-header strong { font-size: 0.88rem; margin: 0; }
+.popup-fonte { font-size: 0.72rem; color: #999; margin: 0; }
+.popup-field { margin: 1px 0; }
+.popup-field span { font-weight: 600; color: #555; }
+.popup-texto { margin-top: 4px; font-size: 0.78rem; color: #666; }
+
+/* Painel de camadas */
+.painel-camadas {
+    background: rgba(0,0,0,0.75); color: white;
+    padding: 8px 12px; border-radius: 6px;
+    font-size: 0.8rem; min-width: 160px;
+}
+.painel-camadas strong { display: block; margin-bottom: 4px; font-size: 0.82rem; }
+.camada-label {
+    display: flex; align-items: center; gap: 2px;
+    cursor: pointer; padding: 2px 0; font-size: 0.78rem;
+}
+.camada-check { cursor: pointer; margin: 0; }
