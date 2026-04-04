@@ -353,21 +353,28 @@ def coletar_unidades_conservacao():
                     zf.extractall(tmpdir)
                 shp_files = list(Path(tmpdir).rglob("*.shp"))
                 if shp_files:
-                    gdf = gpd.read_file(shp_files[0], encoding="latin-1")
-                    gdf = gdf.to_crs(epsg=4326)
-                    sp_mask = gdf.apply(
-                        lambda row: "SP" in str(row.drop("geometry").to_dict()).upper()
-                        or "PAULO" in str(row.drop("geometry").to_dict()).upper(),
-                        axis=1,
-                    )
-                    gdf_sp = gdf[sp_mask].copy()
-                    centroids = gdf_sp.geometry.centroid
-                    for idx, row in gdf_sp.iterrows():
-                        rec = row.drop("geometry").to_dict()
-                        rec["centroid_lon"] = round(centroids[idx].x, 6)
-                        rec["centroid_lat"] = round(centroids[idx].y, 6)
-                        ucs_sp.append(rec)
-                    logger.info("Geopandas: %d UCs em SP com centroides", len(ucs_sp))
+                    try:
+                        gdf = gpd.read_file(shp_files[0], encoding="latin-1")
+                        gdf = gdf.to_crs(epsg=4326)
+                        sp_mask = gdf.apply(
+                            lambda row: "SP" in str(row.drop("geometry").to_dict()).upper()
+                            or "PAULO" in str(row.drop("geometry").to_dict()).upper(),
+                            axis=1,
+                        )
+                        gdf_sp = gdf[sp_mask].copy()
+                        centroids = gdf_sp.geometry.centroid
+                        for idx, row in gdf_sp.iterrows():
+                            rec = row.drop("geometry").to_dict()
+                            rec["centroid_lon"] = round(centroids[idx].x, 6)
+                            rec["centroid_lat"] = round(centroids[idx].y, 6)
+                            ucs_sp.append(rec)
+                        logger.info("Geopandas: %d UCs em SP com centroides", len(ucs_sp))
+                    except UnicodeDecodeError as e:
+                        logger.warning("Falha de encoding no geopandas/pyogrio (%s). Usando fallback DBF.", e)
+                        with zipfile.ZipFile(zip_path, "r") as zf_dbf:
+                            dbf_files = [n for n in zf_dbf.namelist() if n.endswith(".dbf")]
+                            if dbf_files:
+                                ucs_sp = extrair_dbf_basico(zf_dbf, dbf_files[0], "SP")
         except ImportError:
             logger.info("Geopandas não disponível, extraindo apenas DBF...")
             with zipfile.ZipFile(zip_path, "r") as zf:
