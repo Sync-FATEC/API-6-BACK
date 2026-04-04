@@ -83,12 +83,21 @@ def _garantir_coluna_uf_corpus():
 def _normalizar_uf(valor: str | None) -> str:
     if not valor:
         return ""
-    return str(valor).strip().upper()
+    texto = str(valor).strip()
+    try:
+        texto = texto.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+    return texto.upper()
 
 
 def _eh_sp(valor: str | None) -> bool:
     uf = _normalizar_uf(valor)
-    return uf in {"SP", "SAO PAULO", "SÃO PAULO"}
+    if not uf:
+        return False
+
+    partes = [p.strip() for p in uf.replace(";", ",").replace("/", ",").split(",") if p.strip()]
+    return any(p in {"SP", "SAO PAULO", "SÃO PAULO"} for p in partes)
 
 
 def _carregar_queimadas(caminho: Path):
