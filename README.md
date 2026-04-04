@@ -151,6 +151,9 @@ O pipeline ETL (Extract, Transform, Load) eh responsavel por manter a base de da
 ### Como Executar o ETL
 
 ```bash
+# Pre-ETL obrigatorio: SICAR
+python scripts/sicar/coletar_sicar.py
+
 # Pipeline completo (todas as etapas)
 python scripts/etl_pipeline.py
 
@@ -568,6 +571,41 @@ API/
 - Git
 - ~2 GB de disco (modelo de embeddings + dados)
 
+#### Dependencia SICAR e OCR (obrigatorio para ETL)
+
+1. Instale a biblioteca SICAR:
+
+```bash
+pip install git+https://github.com/urbanogilson/SICAR
+```
+
+2. No Windows, instale o Tesseract OCR:
+
+- Download: https://github.com/UB-Mannheim/tesseract/wiki
+- Instale no caminho padrao sugerido (`C:\Program Files\Tesseract-OCR`).
+
+3. Adicione o Tesseract no PATH (Windows):
+
+- PowerShell (sessao atual):
+
+```powershell
+$env:Path += ";C:\Program Files\Tesseract-OCR"
+```
+
+- PowerShell (permanente para o usuario atual):
+
+```powershell
+setx PATH "$env:PATH;C:\Program Files\Tesseract-OCR"
+```
+
+Depois feche e abra o terminal novamente.
+
+- Para validar:
+
+```powershell
+tesseract --version
+```
+
 ### 1. Clonar e Instalar Dependencias
 
 ```bash
@@ -594,6 +632,9 @@ python scripts/criar_banco.py
 ### 4. Executar o Pipeline ETL
 
 ```bash
+# Obrigatorio antes do ETL: atualiza/baixa dados do SICAR
+python scripts/sicar/coletar_sicar.py
+
 # Opcao A: Pipeline completo (coleta + carga + embeddings) ~15-20 min
 python scripts/etl_pipeline.py
 

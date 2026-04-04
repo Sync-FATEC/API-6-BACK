@@ -4,6 +4,7 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_geo
+from asg_sistema.db.conexao import SessionLocal, engine
+from asg_sistema.db.models import AgendamentoAtualizacao, Base
+from asg_sistema.routers.agendamento_router import router as agendamento_router
+from asg_sistema.scheduler.gerenciador import (
+    encerrar_scheduler,
+    iniciar_scheduler,
+    registrar_job,
+)
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -23,7 +32,24 @@ async def lifespan(app: FastAPI):
     logger.info("Pré-carregando modelo NLP...")
     rotas_consulta.obter_interpretador()
     logger.info("Modelo NLP pronto. Primeira requisição será rápida.")
+
+    Base.metadata.create_all(bind=engine)
+    iniciar_scheduler()
+
+    db = SessionLocal()
+    try:
+        agendamentos_ativos = (
+            db.query(AgendamentoAtualizacao)
+            .filter(AgendamentoAtualizacao.ativo)
+            .all()
+        )
+        for ag in agendamentos_ativos:
+            registrar_job(cast(int, ag.id), cast(str, ag.cron_expressao))
+    finally:
+        db.close()
+
     yield
+    encerrar_scheduler()
 
 
 app = FastAPI(
@@ -44,6 +70,7 @@ app.include_router(rotas_consulta.router, prefix="/api", tags=["Consulta"])
 app.include_router(rotas_banco.router, prefix="/api", tags=["Banco de dados"])
 app.include_router(rotas_dados.router, prefix="/api/dados", tags=["Dados"])
 app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
+app.include_router(agendamento_router, prefix="/api/v1")
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(FRONTEND_DIR / "templates"))
