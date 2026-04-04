@@ -1,66 +1,66 @@
 {
   "titulo": "Coleta de Dados ASG - Estado de São Paulo",
-  "data_execucao": "2026-03-26T12:45:20.595145",
+  "data_execucao": "2026-03-23T14:01:35.998047",
   "fontes": [
     {
       "fonte": "FUNAI - Terras Indígenas",
       "registros": 29,
       "status": "OK",
-      "duracao_segundos": 1.0
+      "duracao_segundos": 0.9
     },
     {
       "fonte": "INPE/DETER - Desmatamento Cerrado",
       "registros": 31,
       "status": "OK",
-      "duracao_segundos": 1.2
+      "duracao_segundos": 0.8
     },
     {
       "fonte": "INPE/DETER - Desmatamento Amazônia",
       "registros": 0,
       "status": "OK",
-      "duracao_segundos": 5.8
+      "duracao_segundos": 2.5
     },
     {
       "fonte": "INPE/Queimadas - Focos de Incêndio",
-      "registros": 13100,
+      "registros": 13965,
       "status": "OK",
-      "duracao_segundos": 146.6
+      "duracao_segundos": 21.3
     },
     {
       "fonte": "INPE/PRODES - Desmatamento Anual",
       "registros": 50000,
       "status": "OK",
-      "duracao_segundos": 16.9
+      "duracao_segundos": 23.5
     },
     {
       "fonte": "MMA/ICMBio - Unidades de Conservação",
-      "registros": 15,
+      "registros": 2147,
       "status": "OK",
-      "duracao_segundos": 22.8
+      "duracao_segundos": 90.1
     },
     {
       "fonte": "SICAR - Cadastro Ambiental Rural",
       "registros": 0,
       "status": "OK",
-      "duracao_segundos": 31.3
+      "duracao_segundos": 1.1
     },
     {
       "fonte": "Palmares - Comunidades Quilombolas",
       "registros": 52,
       "status": "OK",
-      "duracao_segundos": 1.1
+      "duracao_segundos": 2.7
     }
   ],
-  "total_geral": 63227,
+  "total_geral": 66224,
   "arquivos_gerados": [
-    "sicar_imoveis_sp.json",
+    "deter_amazonia_sp.json",
     "deter_desmatamento_sp.json",
-    "unidades_conservacao_sp.json",
-    "resumo_coleta.json",
-    "queimadas_focos_sp.json",
     "funai_terras_indigenas_sp.json",
-    "prodes_desmatamento_sp.json",
     "palmares_quilombolas_sp.json",
-    "deter_amazonia_sp.json"
+    "prodes_desmatamento_sp.json",
+    "queimadas_focos_sp.json",
+    "resumo_coleta.json",
+    "sicar_imoveis_sp.json",
+    "unidades_conservacao_sp.json"
   ]
 }
