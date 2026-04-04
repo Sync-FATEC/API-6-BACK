@@ -105,16 +105,29 @@ def executar_etl_api(etapa: str = "full"):
     )
 
     assegurar_cooldown_disparo_etl_api()
-    script = Path(__file__).resolve().parent.parent.parent / "scripts" / "etl_pipeline.py"
-    repo_root = script.resolve().parent.parent
-    try:
-        proc = subprocess.Popen(
-            [sys.executable, str(script), "--etapa", etapa],
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    script_etl = repo_root / "scripts" / "etl_pipeline.py"
+    script_sicar = repo_root / "scripts" / "sicar" / "coletar_sicar.py"
+
+    def _rodar_pipeline():
+        subprocess.run(
+            [sys.executable, str(script_sicar)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             cwd=str(repo_root),
         )
+        subprocess.run(
+            [sys.executable, str(script_etl), "--etapa", etapa],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=str(repo_root),
+        )
+
+    import threading
+    try:
+        t = threading.Thread(target=_rodar_pipeline, daemon=True)
+        t.start()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Falha ao iniciar ETL: {e}") from e
     registrar_disparo_etl_api()
-    return {"status": "iniciado", "pid": proc.pid, "etapa": etapa}
+    return {"status": "iniciado", "etapa": etapa}
