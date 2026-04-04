@@ -1,12 +1,13 @@
 """FastAPI application factory."""
 
 import logging
+import subprocess
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import cast
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -122,39 +123,58 @@ def historico_etl():
 
 
 @app.post("/api/etl/executar")
-def executar_etl_api(etapa: str = "full"):
-    """Dispara execucao do pipeline ETL via API (cooldown: 1h se ENV=production, 5s caso contrário)."""
-    import subprocess
-
+def executar_etl_api(
+    background_tasks: BackgroundTasks, 
+    etapa: str = "full", 
+    skip_sicar: bool = False
+):
+    """Dispara execucao do pipeline ETL via API."""
+    
     from asg_sistema.api.etl_cooldown import (
         assegurar_cooldown_disparo_etl_api,
         registrar_disparo_etl_api,
     )
 
     assegurar_cooldown_disparo_etl_api()
+    
     repo_root = Path(__file__).resolve().parent.parent.parent
     script_etl = repo_root / "scripts" / "etl_pipeline.py"
     script_sicar = repo_root / "scripts" / "sicar" / "coletar_sicar.py"
 
-    def _rodar_pipeline():
-        subprocess.run(
-            [sys.executable, str(script_sicar)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            cwd=str(repo_root),
-        )
-        subprocess.run(
-            [sys.executable, str(script_etl), "--etapa", etapa],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            cwd=str(repo_root),
-        )
+    if not script_etl.exists():
+        raise HTTPException(status_code=500, detail=f"Script ETL não encontrado em: {script_etl}")
 
-    import threading
-    try:
-        t = threading.Thread(target=_rodar_pipeline, daemon=True)
-        t.start()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Falha ao iniciar ETL: {e}") from e
+    def _rodar_pipeline():
+        try:
+            if not skip_sicar:
+                print(f"[INFO] Iniciando coleta SICAR: {script_sicar}")
+                subprocess.run(
+                    [sys.executable, str(script_sicar)],
+                    cwd=str(repo_root),
+                    check=True
+                )
+            else:
+                print("[INFO] Pulando a coleta do SICAR (skip_sicar=True).")
+            
+            print(f"[INFO] Iniciando pipeline ETL (etapa: {etapa}): {script_etl}")
+            subprocess.run(
+                [sys.executable, str(script_etl), "--etapa", etapa],
+                cwd=str(repo_root),
+                check=True
+            )
+            print("[INFO] Pipeline ETL finalizado com sucesso pela API.")
+            
+        except subprocess.CalledProcessError as e:
+            print(f"[ERRO] O subprocesso falhou com código {e.returncode}. Comando: {e.cmd}")
+        except Exception as e:
+            print(f"[ERRO] Falha inesperada no worker do ETL: {e}")
+
+    background_tasks.add_task(_rodar_pipeline)
+    
     registrar_disparo_etl_api()
-    return {"status": "iniciado", "etapa": etapa}
+    
+    return {
+        "status": "iniciado", 
+        "etapa": etapa, 
+        "skip_sicar": skip_sicar
+    }

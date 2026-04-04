@@ -1,4 +1,4 @@
-# NLP (stack do professor)
+# NLP
 nltk>=3.9
 spacy>=3.8
 scikit-learn>=1.5

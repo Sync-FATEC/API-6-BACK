@@ -30,6 +30,8 @@ class Configuracao(BaseSettings):
     api_host: str = "0.0.0.0"
     api_porta: int = 8000
 
+    env: str = "development"
+
     class Config:
         env_file = _ENV_FILE
         env_prefix = "ASG_"
@@ -56,9 +58,7 @@ class Configuracao(BaseSettings):
 
     @property
     def etl_api_cooldown_segundos(self) -> int:
-        """Intervalo mínimo entre POST /api/etl/executar: 1h em production, 5s em development."""
-        amb = (os.environ.get("ENV") or os.environ.get("ASG_ENV") or "development").strip().lower()
-        return 3600 if amb == "production" else 5
+        return 3600 if self.env == "production" else 5
 
 
 config = Configuracao()
