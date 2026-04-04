@@ -70,6 +70,7 @@ def buscar_uids_prodes_por_municipio(municipio: str, raio_graus: float = 0.3) ->
     uid_rows = executar_consulta(
         """SELECT uid FROM prodes_desmatamento
            WHERE geom IS NOT NULL
+                         AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')
              AND ST_DWithin(geom::geography,
                             ST_SetSRID(ST_MakePoint(:lon, :lat), 4674)::geography,
                             :raio_m)""",

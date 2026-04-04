@@ -161,6 +161,12 @@ CREATE TABLE IF NOT EXISTS corpus_asg (
     metadados_json JSONB
 );
 
+-- Migração para bancos já existentes que ainda não possuem uf_sigla
+ALTER TABLE corpus_asg ADD COLUMN IF NOT EXISTS uf_sigla VARCHAR(5);
+UPDATE corpus_asg SET uf_sigla = 'SP' WHERE uf_sigla IS NULL OR TRIM(uf_sigla) = '';
+ALTER TABLE corpus_asg ALTER COLUMN uf_sigla SET DEFAULT 'SP';
+ALTER TABLE corpus_asg ALTER COLUMN uf_sigla SET NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_corpus_fonte ON corpus_asg(fonte);
 CREATE INDEX IF NOT EXISTS idx_corpus_uf_sigla ON corpus_asg(uf_sigla);
 CREATE INDEX IF NOT EXISTS idx_corpus_municipio ON corpus_asg(municipio);

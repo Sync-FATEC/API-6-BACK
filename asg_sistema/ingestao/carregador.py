@@ -91,6 +91,20 @@ def _eh_sp(valor: str | None) -> bool:
     return uf in {"SP", "SAO PAULO", "SÃO PAULO"}
 
 
+def _eh_cod_estado_sp(valor) -> bool:
+    if valor is None:
+        return False
+
+    texto = str(valor).strip().upper()
+    if texto in {"SP", "SAO PAULO", "SÃO PAULO", "35", "035"}:
+        return True
+
+    try:
+        return int(float(texto)) == 35
+    except (ValueError, TypeError):
+        return False
+
+
 def _carregar_queimadas(caminho: Path):
     if not caminho.exists():
         logger.warning("Arquivo de queimadas nao encontrado: %s", caminho)
@@ -444,9 +458,15 @@ def _carregar_sicar(caminho_geojson: Path):
     AMOSTRA_CORPUS = 50
     batch = []
     inseridos = 0
+    elegiveis_sp = 0
+    corpus_total = 0
 
-    for i, feat in enumerate(features):
+    for feat in features:
         props = feat.get("properties") or {}
+        if not _eh_cod_estado_sp(props.get("cod_estado")):
+            continue
+
+        elegiveis_sp += 1
         geom = feat.get("geometry")
         batch.append({
             "fid": fonte_id,
@@ -465,21 +485,23 @@ def _carregar_sicar(caminho_geojson: Path):
             "geom": json.dumps(geom) if geom else None,
         })
 
-        if i % AMOSTRA_CORPUS == 0:
+        if elegiveis_sp % AMOSTRA_CORPUS == 1:
             doc = textualizar_sicar(props)
+            doc["uf_sigla"] = "SP"
             _inserir_corpus(doc)
+            corpus_total += 1
 
         if len(batch) >= BATCH_SIZE:
             executar_sql_many(sql, batch)
             inseridos += len(batch)
             batch = []
-            logger.info("  %d/%d imoveis inseridos", inseridos, total)
+            logger.info("  %d imoveis inseridos", inseridos)
 
     if batch:
         executar_sql_many(sql, batch)
         inseridos += len(batch)
 
-    corpus_total = total // AMOSTRA_CORPUS + 1
+    logger.info("SICAR: %d registros elegiveis em SP (de %d no arquivo)", elegiveis_sp, total)
     logger.info("SICAR: %d registros na tabela, %d amostras no corpus", inseridos, corpus_total)
 
 
