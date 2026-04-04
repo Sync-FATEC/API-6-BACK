@@ -66,20 +66,9 @@ class InterpretadorConsulta:
                 "intencao_detectada": "fora_do_escopo",
                 "confianca": round(confianca, 3) if confianca else 0,
                 "entidades": {},
-                "resumo": (
-                    "Desculpe, não entendi sua pergunta. "
-                    "Sou um assistente especializado em dados ambientais, sociais e de governança (ASG) "
-                    "do Estado de São Paulo. Tente perguntar sobre:\n"
-                    "- Focos de queimada (ex: 'Houve queimadas em Avaí?')\n"
-                    "- Terras indígenas (ex: 'Quais terras indígenas existem em Ubatuba?')\n"
-                    "- Desmatamento (ex: 'Alertas de desmatamento no Cerrado')\n"
-                    "- Unidades de conservação (ex: 'Unidades de conservação em Bertioga')\n"
-                    "- Comunidades quilombolas (ex: 'Quilombolas no Vale do Ribeira')\n"
-                    "- Desmatamento histórico PRODES (ex: 'Desmatamento anual na Mata Atlântica')\n"
-                    "- Resumo municipal (ex: 'Qual a situação ambiental de Campinas?')"
-                ),
+                "resumo": "Não encontrei informações relacionadas à sua pergunta. Tente consultar sobre queimadas, desmatamento, terras indígenas, unidades de conservação ou comunidades quilombolas no Estado de São Paulo.",
                 "estatisticas": {},
-                "dados": [],
+                "dados": [],    
                 "fontes": [],
                 "geojson": None,
                 "total_resultados": 0,
