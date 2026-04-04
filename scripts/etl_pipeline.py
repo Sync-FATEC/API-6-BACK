@@ -140,7 +140,7 @@ def etapa_transform_load(registro: RegistroETL) -> bool:
         from asg_sistema.db.conexao import executar_sql, executar_consulta
 
         logger.info("Limpando tabelas existentes...")
-        for tabela in ["corpus_asg", "queimadas", "desmatamento_alertas", "unidades_conservacao", "terras_indigenas", "prodes_desmatamento", "comunidades_quilombolas", "fontes"]:
+        for tabela in ["corpus_asg", "queimadas", "desmatamento_alertas", "unidades_conservacao", "terras_indigenas", "prodes_desmatamento", "comunidades_quilombolas", "sicar_imoveis", "fontes"]:            
             executar_sql(f"DELETE FROM {tabela}")
         logger.info("Tabelas limpas.")
 
@@ -148,7 +148,7 @@ def etapa_transform_load(registro: RegistroETL) -> bool:
         carregar_tudo(config.caminho_dados)
 
         contagens = {}
-        for tabela in ["queimadas", "terras_indigenas", "desmatamento_alertas", "unidades_conservacao", "prodes_desmatamento", "comunidades_quilombolas", "corpus_asg"]:
+        for tabela in ["queimadas", "terras_indigenas", "desmatamento_alertas", "unidades_conservacao", "prodes_desmatamento", "comunidades_quilombolas", "sicar_imoveis", "corpus_asg"]:            
             r = executar_consulta(f"SELECT COUNT(*) as total FROM {tabela}")
             contagens[tabela] = r[0]["total"]
             logger.info("  %s: %d registros", tabela, contagens[tabela])
