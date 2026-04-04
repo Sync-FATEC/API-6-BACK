@@ -110,8 +110,11 @@ class InterpretadorConsulta:
 
         resposta["tempo_processamento_ms"] = round((time.time() - inicio) * 1000, 1)
         resposta["preprocessamento"] = {
+            "tokens_originais": preprocessado["tokens_originais"],
             "tokens_limpos": preprocessado["tokens_limpos"],
             "stems": preprocessado["stems"],
+            "lemmas": preprocessado["lemmas"],
+            "texto_limpo": preprocessado["texto_limpo"],
         }
 
         return resposta
