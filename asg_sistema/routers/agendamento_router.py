@@ -45,10 +45,13 @@ def criar_agendamento(
     (FUNAI, INPE/DETER, INPE/Queimadas, INPE/PRODES, ICMBio, SICAR, Palmares).
 
     **Exemplos de recorrência:**
-    - A cada 1 semana às 02:00 → `{ "intervalo": 1, "unidade": "semana", "horario": "02:00" }`
-    - A cada 1 mês às 01:00   → `{ "intervalo": 1, "unidade": "mes",    "horario": "01:00" }`
-    - A cada 2 dias às 06:30  → `{ "intervalo": 2, "unidade": "dia",    "horario": "06:30" }`
-    - A cada 3 horas          → `{ "intervalo": 3, "unidade": "hora" }`
+        - A cada 1 semana (pelo dia da data) às 02:00 →
+            `{ "intervalo": 1, "unidade": "semana", "horario": "02:00", "data_inicio": "2026-04-08" }`
+        - A cada 1 mês (pelo dia da data) às 01:00   →
+            `{ "intervalo": 1, "unidade": "mes",    "horario": "01:00", "data_inicio": "2026-04-01" }`
+        - A cada 2 dias às 06:30  → `{ "intervalo": 2, "unidade": "dia",    "horario": "06:30" }`
+        - A cada 5 minutos        → `{ "intervalo": 5, "unidade": "minuto" }`
+        - A cada 3 horas          → `{ "intervalo": 3, "unidade": "hora" }`
     """
     agendamento = AgendamentoAtualizacao(
         intervalo=payload.intervalo,
@@ -99,7 +102,7 @@ def atualizar_agendamento(
     """
     Atualiza parcialmente um agendamento.
 
-    - Qualquer combinação de **intervalo**, **unidade** ou **horario** recalcula o cron automaticamente.
+    - Qualquer combinação de **intervalo**, **unidade**, **horario** ou **data_inicio** recalcula o cron automaticamente.
     - `ativo=false` pausa o job sem excluí-lo do banco.
     - `ativo=true` reativa com a recorrência atual.
     """
@@ -116,7 +119,12 @@ def atualizar_agendamento(
     agendamento.intervalo      = novo_intervalo
     agendamento.unidade        = nova_unidade
     agendamento.horario        = novo_horario.strftime("%H:%M")
-    agendamento.cron_expressao = recorrencia_para_cron(novo_intervalo, nova_unidade, novo_horario)
+    agendamento.cron_expressao = recorrencia_para_cron(
+        novo_intervalo,
+        nova_unidade,
+        novo_horario,
+        data_base=payload.data_inicio,
+    )
 
     if payload.ativo is not None:
         agendamento.ativo = payload.ativo

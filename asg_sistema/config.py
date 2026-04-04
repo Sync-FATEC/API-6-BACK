@@ -14,7 +14,7 @@ load_dotenv(_ENV_FILE)
 
 class Configuracao(BaseSettings):
     db_host: str = "localhost"
-    db_port: int = 5432
+    db_port: int = 5433
     db_nome: str = "asg_sp"
     db_usuario: str = "asg_user"
     db_senha: str = "asg_pass"
