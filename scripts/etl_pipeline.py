@@ -376,8 +376,11 @@ def main():
         agendar(args.agendar)
         return
 
-    registro = RegistroETL()
+    if args.etapa == "full":
+        pipeline_completo()
+        return
 
+    registro = RegistroETL()
     if args.etapa == "extract":
         etapa_extract(registro)
     elif args.etapa == "load":
@@ -386,9 +389,6 @@ def main():
         etapa_vetorizacao(registro)
     elif args.etapa == "validate":
         etapa_validacao(registro)
-    else:
-        pipeline_completo()
-
     registro.salvar()
 
 

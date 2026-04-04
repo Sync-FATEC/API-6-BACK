@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from asg_sistema.db.conexao import executar_sql, executar_consulta
+from asg_sistema.db.conexao import executar_sql, executar_consulta, executar_sql_many
 from asg_sistema.ingestao.textualizador import (
     textualizar_queimada,
     textualizar_terra_indigena,
@@ -15,6 +15,7 @@ from asg_sistema.ingestao.textualizador import (
     textualizar_unidade_conservacao,
     textualizar_prodes,
     textualizar_quilombola,
+    textualizar_sicar,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ def carregar_tudo(caminho_dados: Path):
     _carregar_ucs(caminho_dados / "unidades_conservacao_sp.json")
     _carregar_prodes(caminho_dados / "prodes_desmatamento_sp.json")
     _carregar_palmares(caminho_dados / "palmares_quilombolas_sp.json")
+    _carregar_sicar(caminho_dados / "geojson" / "SP_AREA_IMOVEL.geojson")
     logger.info("Carga finalizada.")
 
 
@@ -398,6 +400,87 @@ def _carregar_palmares(caminho: Path):
         inseridos += 1
 
     logger.info("Palmares: %d registros carregados", inseridos)
+
+
+def _carregar_sicar(caminho_geojson: Path):
+    if not caminho_geojson.exists():
+        logger.warning("GeoJSON do SICAR nao encontrado: %s", caminho_geojson)
+        return
+
+    with open(caminho_geojson, encoding="utf-8") as f:
+        data = json.load(f)
+
+    features = data.get("features", [])
+    total = len(features)
+    logger.info("Carregando %d imoveis rurais (SICAR)...", total)
+
+    fonte_id = _inserir_fonte({
+        "fonte": f"SICAR - {caminho_geojson.stem}",
+        "descricao": "Cadastro Ambiental Rural — polígonos do estado de SP",
+        "url_origem": "https://consultapublica.car.gov.br/publico/estados/downloads",
+        "data_coleta": datetime.now().isoformat(),
+        "total_registros": total,
+        "escopo": "Estado de São Paulo",
+    })
+
+    sql = """
+        INSERT INTO sicar_imoveis (
+            fonte_id, cod_imovel, cod_tema, nom_tema,
+            ind_status, ind_tipo, des_condic,
+            municipio, cod_estado, num_area, mod_fiscal,
+            dat_criacao, dat_atualizacao, geom
+        ) VALUES (
+            :fid, :cod_imovel, :cod_tema, :nom_tema,
+            :ind_status, :ind_tipo, :des_condic,
+            :municipio, :cod_estado, :num_area, :mod_fiscal,
+            :dat_criacao, :dat_atualizacao,
+            CASE WHEN CAST(:geom AS TEXT) IS NOT NULL
+                 THEN ST_SetSRID(ST_GeomFromGeoJSON(CAST(:geom AS TEXT)), 4674)
+                 ELSE NULL END
+        )
+    """
+
+    BATCH_SIZE = 1000
+    AMOSTRA_CORPUS = 50
+    batch = []
+    inseridos = 0
+
+    for i, feat in enumerate(features):
+        props = feat.get("properties") or {}
+        geom = feat.get("geometry")
+        batch.append({
+            "fid": fonte_id,
+            "cod_imovel": props.get("cod_imovel"),
+            "cod_tema": props.get("cod_tema"),
+            "nom_tema": props.get("nom_tema"),
+            "ind_status": props.get("ind_status"),
+            "ind_tipo": props.get("ind_tipo"),
+            "des_condic": props.get("des_condic"),
+            "municipio": props.get("municipio"),
+            "cod_estado": props.get("cod_estado"),
+            "num_area": _para_float(props.get("num_area")),
+            "mod_fiscal": _para_float(props.get("mod_fiscal")),
+            "dat_criacao": props.get("dat_criaca"),
+            "dat_atualizacao": props.get("dat_atuali"),
+            "geom": json.dumps(geom) if geom else None,
+        })
+
+        if i % AMOSTRA_CORPUS == 0:
+            doc = textualizar_sicar(props)
+            _inserir_corpus(doc)
+
+        if len(batch) >= BATCH_SIZE:
+            executar_sql_many(sql, batch)
+            inseridos += len(batch)
+            batch = []
+            logger.info("  %d/%d imoveis inseridos", inseridos, total)
+
+    if batch:
+        executar_sql_many(sql, batch)
+        inseridos += len(batch)
+
+    corpus_total = total // AMOSTRA_CORPUS + 1
+    logger.info("SICAR: %d registros na tabela, %d amostras no corpus", inseridos, corpus_total)
 
 
 def _para_float(valor) -> float | None:

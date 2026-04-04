@@ -183,6 +183,52 @@ def textualizar_quilombola(registro: dict) -> dict:
     }
 
 
+def textualizar_sicar(props: dict) -> dict:
+    status_map = {"AT": "ativo", "PE": "pendente", "SU": "suspenso", "CA": "cancelado"}
+    tipo_map = {"IRU": "imóvel rural", "ICA": "imóvel de categoria especial"}
+    status = status_map.get(props.get("ind_status", ""), props.get("ind_status", "N/I"))
+    tipo = tipo_map.get(props.get("ind_tipo", ""), props.get("ind_tipo", "N/I"))
+    texto = (
+        f"Imóvel rural cadastrado no SICAR/CAR com código {props.get('cod_imovel', 'N/I')}, "
+        f"classificado como {tipo}, situação {status}, "
+        f"localizado no município de {props.get('municipio', 'N/I')}, São Paulo. "
+        f"Área total: {props.get('num_area', 'N/I')} hectares "
+        f"({props.get('mod_fiscal', 'N/I')} módulos fiscais). "
+        f"Condição: {props.get('des_condic', 'N/I')}. "
+        f"Cadastro criado em {props.get('dat_criaca', 'N/I')}, "
+        f"atualizado em {props.get('dat_atuali', 'N/I')}. "
+        f"Fonte: SICAR — Cadastro Ambiental Rural."
+    )
+    return {
+        "fonte": "sicar",
+        "tipo_registro": "imovel_rural",
+        "municipio": props.get("municipio", ""),
+        "data_referencia": _converter_data_sicar(props.get("dat_atuali", "")),
+        "texto": texto,
+        "metadados_json": {
+            "cod_imovel": props.get("cod_imovel", ""),
+            "ind_status": props.get("ind_status", ""),
+            "ind_tipo": props.get("ind_tipo", ""),
+            "num_area": props.get("num_area"),
+            "mod_fiscal": props.get("mod_fiscal"),
+            "des_condic": props.get("des_condic", ""),
+        },
+    }
+
+
+def _converter_data_sicar(valor: str) -> str | None:
+    """Converte DD/MM/YYYY para YYYY-MM-DD."""
+    if not valor:
+        return None
+    try:
+        partes = str(valor).strip().split("/")
+        if len(partes) == 3:
+            return f"{partes[2]}-{partes[1]}-{partes[0]}"
+    except Exception:
+        pass
+    return None
+
+
 def _extrair_data(valor: str) -> str | None:
     if not valor:
         return None
