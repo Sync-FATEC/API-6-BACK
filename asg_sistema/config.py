@@ -25,6 +25,7 @@ class Configuracao(BaseSettings):
 
     busca_top_k: int = 15
     confianca_minima: float = 0.3
+    uf_escopo: str = "SP"
 
     api_host: str = "0.0.0.0"
     api_porta: int = 8000

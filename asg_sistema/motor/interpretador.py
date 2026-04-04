@@ -8,6 +8,7 @@ from asg_sistema.pln.buscador_semantico import BuscadorSemantico
 from asg_sistema.motor.entidades import ExtratorEntidades
 from asg_sistema.motor.gerador_resposta import GeradorResposta
 from asg_sistema.db import repositorio
+from asg_sistema.config import config
 
 
 MAPA_INTENCAO_FONTE = {
@@ -247,6 +248,7 @@ class InterpretadorConsulta:
         filtros = {
             "fonte": MAPA_INTENCAO_FONTE.get(intencao) if not fontes_multiplas else None,
             "fontes": fontes_multiplas,
+            "uf_sigla": config.uf_escopo,
             "municipios": entidades.get("municipios", []),
             "periodo": entidades.get("periodo", {}),
         }
@@ -273,6 +275,7 @@ class InterpretadorConsulta:
             resultados_prodes = repositorio.busca_vetorial_prodes_uids(
                 embedding_str=embedding_str,
                 uids=uids_prodes,
+                uf_sigla=config.uf_escopo,
                 limite=self.top_k,
             )
 
@@ -294,6 +297,7 @@ class InterpretadorConsulta:
             resultados_geo_prodes = repositorio.busca_vetorial_prodes_uids(
                 embedding_str=embedding_str,
                 uids=uids_prodes_geo,
+                uf_sigla=config.uf_escopo,
                 limite=1000,
             )
             ids_vistos_geo = {r["id"] for r in resultados_geo_deter}

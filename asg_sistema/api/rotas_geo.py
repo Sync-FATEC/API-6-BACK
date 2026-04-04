@@ -9,7 +9,7 @@ router = APIRouter()
 
 @router.get("/queimadas")
 def geojson_queimadas(municipio: str | None = Query(None), limite: int = Query(1000, le=10000)):
-    filtro = "WHERE geom IS NOT NULL"
+    filtro = "WHERE geom IS NOT NULL AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')"
     params = {"limite": limite}
     if municipio:
         filtro += " AND municipio ILIKE :mun"
@@ -31,7 +31,9 @@ def geojson_terras_indigenas():
     rows = executar_consulta(
         """SELECT ST_AsGeoJSON(geom) as geometry, nome, etnia,
                   municipio, area_ha, fase
-           FROM terras_indigenas WHERE geom IS NOT NULL"""
+                     FROM terras_indigenas
+                     WHERE geom IS NOT NULL
+                         AND UPPER(TRIM(uf)) = 'SP'"""
     )
     return _montar_feature_collection(rows, fonte="funai")
 
@@ -41,7 +43,9 @@ def geojson_desmatamento():
     rows = executar_consulta(
         """SELECT ST_AsGeoJSON(geom) as geometry, classe, municipio,
                   data_avistamento, area_total_km2
-           FROM desmatamento_alertas WHERE geom IS NOT NULL"""
+                     FROM desmatamento_alertas
+                     WHERE geom IS NOT NULL
+                         AND UPPER(TRIM(uf)) = 'SP'"""
     )
     return _montar_feature_collection(rows, fonte="deter")
 
@@ -51,14 +55,16 @@ def geojson_desmatamento():
 def geojson_unidades_conservacao():
     rows = executar_consulta(
         """SELECT nome, categoria, grupo, esfera, municipio, area_ha
-           FROM unidades_conservacao LIMIT 500"""
+           FROM unidades_conservacao
+           WHERE UPPER(COALESCE(uf, '')) LIKE '%SP%'
+           LIMIT 500"""
     )
     return {"type": "FeatureCollection", "features": [], "dados": rows, "nota": "UCs sem geometria no banco"}
 
 
 @router.get("/prodes")
 def geojson_prodes(ano: int | None = Query(None), limite: int = Query(2000, le=10000)):
-    filtro = "WHERE geom IS NOT NULL"
+    filtro = "WHERE geom IS NOT NULL AND UPPER(TRIM(estado)) = 'SP'"
     params = {"limite": limite}
     if ano:
         filtro += " AND ano = :ano"
@@ -76,10 +82,10 @@ def geojson_prodes(ano: int | None = Query(None), limite: int = Query(2000, le=1
 
 @router.get("/quilombolas")
 def geojson_quilombolas(municipio: str | None = Query(None)):
-    filtro = ""
+    filtro = "WHERE UPPER(TRIM(uf)) = 'SP'"
     params = {}
     if municipio:
-        filtro = "WHERE municipio ILIKE :mun"
+        filtro += " AND municipio ILIKE :mun"
         params["mun"] = f"%{municipio}%"
 
     rows = executar_consulta(

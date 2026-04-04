@@ -23,10 +23,10 @@ def listar_queimadas(
     municipio: str | None = Query(None),
     limite: int = Query(100, le=5000),
 ):
-    filtro = ""
+    filtro = "WHERE UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')"
     params = {"limite": limite}
     if municipio:
-        filtro = "WHERE municipio ILIKE :mun"
+        filtro += " AND municipio ILIKE :mun"
         params["mun"] = f"%{municipio}%"
 
     return executar_consulta(
@@ -40,10 +40,10 @@ def listar_queimadas(
 
 @router.get("/terras-indigenas")
 def listar_terras_indigenas(municipio: str | None = Query(None)):
-    filtro = ""
+    filtro = "WHERE UPPER(TRIM(uf)) = 'SP'"
     params = {}
     if municipio:
-        filtro = "WHERE municipio ILIKE :mun"
+        filtro += " AND municipio ILIKE :mun"
         params["mun"] = f"%{municipio}%"
 
     return executar_consulta(
@@ -55,10 +55,10 @@ def listar_terras_indigenas(municipio: str | None = Query(None)):
 
 @router.get("/desmatamento")
 def listar_desmatamento(municipio: str | None = Query(None)):
-    filtro = ""
+    filtro = "WHERE UPPER(TRIM(uf)) = 'SP'"
     params = {}
     if municipio:
-        filtro = "WHERE municipio ILIKE :mun"
+        filtro += " AND municipio ILIKE :mun"
         params["mun"] = f"%{municipio}%"
 
     return executar_consulta(
@@ -72,10 +72,10 @@ def listar_desmatamento(municipio: str | None = Query(None)):
 
 @router.get("/unidades-conservacao")
 def listar_ucs(municipio: str | None = Query(None)):
-    filtro = ""
+    filtro = "WHERE UPPER(COALESCE(uf, '')) LIKE '%SP%'"
     params = {}
     if municipio:
-        filtro = "WHERE municipio ILIKE :mun"
+        filtro += " AND municipio ILIKE :mun"
         params["mun"] = f"%{municipio}%"
 
     return executar_consulta(

@@ -256,6 +256,49 @@ def etapa_validacao(registro: RegistroETL) -> bool:
         total_geo = r[0]["total"]
         checks.append(("geometrias queimadas", total_geo > 0))
 
+        # Garantia de escopo: nenhum registro fora de SP.
+        r = executar_consulta(
+            """SELECT COUNT(*) as total
+               FROM queimadas
+               WHERE UPPER(TRIM(COALESCE(estado, ''))) NOT IN ('SP', 'SAO PAULO', 'SÃO PAULO')"""
+        )
+        checks.append(("queimadas apenas SP", r[0]["total"] == 0))
+
+        r = executar_consulta(
+            """SELECT COUNT(*) as total
+               FROM terras_indigenas
+               WHERE UPPER(TRIM(COALESCE(uf, ''))) <> 'SP'"""
+        )
+        checks.append(("terras indigenas apenas SP", r[0]["total"] == 0))
+
+        r = executar_consulta(
+            """SELECT COUNT(*) as total
+               FROM desmatamento_alertas
+               WHERE UPPER(TRIM(COALESCE(uf, ''))) <> 'SP'"""
+        )
+        checks.append(("desmatamento apenas SP", r[0]["total"] == 0))
+
+        r = executar_consulta(
+            """SELECT COUNT(*) as total
+               FROM prodes_desmatamento
+               WHERE UPPER(TRIM(COALESCE(estado, ''))) <> 'SP'"""
+        )
+        checks.append(("prodes apenas SP", r[0]["total"] == 0))
+
+        r = executar_consulta(
+            """SELECT COUNT(*) as total
+               FROM comunidades_quilombolas
+               WHERE UPPER(TRIM(COALESCE(uf, ''))) <> 'SP'"""
+        )
+        checks.append(("quilombolas apenas SP", r[0]["total"] == 0))
+
+        r = executar_consulta(
+            """SELECT COUNT(*) as total
+               FROM corpus_asg
+               WHERE UPPER(TRIM(COALESCE(uf_sigla, ''))) <> 'SP'"""
+        )
+        checks.append(("corpus apenas SP", r[0]["total"] == 0))
+
         todos_ok = True
         for nome, ok in checks:
             status = "OK" if ok else "FALHA"

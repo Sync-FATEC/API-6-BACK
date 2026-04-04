@@ -21,6 +21,7 @@ class BuscadorSemantico:
             embedding_str=embedding_str,
             fonte=filtros.get("fonte"),
             fontes=filtros.get("fontes"),
+            uf_sigla=filtros.get("uf_sigla", "SP"),
             municipio=municipios[0] if municipios else None,
             data_inicio=periodo.get("inicio"),
             data_fim=periodo.get("fim"),

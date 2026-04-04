@@ -5,13 +5,14 @@ def busca_vetorial(
     embedding_str: str,
     fonte: str | None = None,
     fontes: list[str] | None = None,
+    uf_sigla: str = "SP",
     municipio: str | None = None,
     data_inicio: str | None = None,
     data_fim: str | None = None,
     limite: int = 15,
 ) -> list[dict]:
-    filtros = []
-    params = {"emb": embedding_str, "limite": limite}
+    filtros = ["UPPER(TRIM(uf_sigla)) = :uf_sigla"]
+    params = {"emb": embedding_str, "limite": limite, "uf_sigla": uf_sigla.upper().strip()}
 
     if fontes:
         placeholders = ",".join(f":f{i}" for i in range(len(fontes)))
@@ -56,7 +57,10 @@ def buscar_uids_prodes_por_municipio(municipio: str, raio_graus: float = 0.3) ->
     nome = re.sub(r"\s*\([A-Z]{2}\)\s*$", "", municipio.split(",")[0].strip())
     # pega centroide aproximado do município via tabela de queimadas
     rows = executar_consulta(
-        "SELECT AVG(longitude) as lon, AVG(latitude) as lat FROM queimadas WHERE municipio ILIKE :mun",
+                """SELECT AVG(longitude) as lon, AVG(latitude) as lat
+                     FROM queimadas
+                     WHERE municipio ILIKE :mun
+                         AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')""",
         {"mun": f"%{nome}%"},
     )
     if not rows or not rows[0].get("lon"):
@@ -77,13 +81,14 @@ def buscar_uids_prodes_por_municipio(municipio: str, raio_graus: float = 0.3) ->
 def busca_vetorial_prodes_uids(
     embedding_str: str,
     uids: list[str],
+    uf_sigla: str = "SP",
     limite: int = 15,
 ) -> list[dict]:
     """Busca semântica no corpus PRODES filtrada por UIDs específicos."""
     if not uids:
         return []
     placeholders = ",".join(f":u{i}" for i in range(len(uids)))
-    params = {"emb": embedding_str, "limite": limite}
+    params = {"emb": embedding_str, "limite": limite, "uf_sigla": uf_sigla.upper().strip()}
     for i, u in enumerate(uids):
         params[f"u{i}"] = u
     sql = f"""
@@ -92,6 +97,7 @@ def busca_vetorial_prodes_uids(
                1 - (embedding <=> :emb) AS similaridade
         FROM corpus_asg
         WHERE fonte = 'prodes'
+                    AND UPPER(TRIM(uf_sigla)) = :uf_sigla
           AND (metadados_json->>'uid') IN ({placeholders})
         ORDER BY embedding <=> :emb
         LIMIT :limite
