@@ -3,6 +3,9 @@
 import json
 
 
+SP_BBOX = (-53.2, -25.4, -44.1, -19.8)
+
+
 MAPA_FONTE_NOME = {
     "queimadas": "INPE/Queimadas",
     "funai": "FUNAI",
@@ -264,6 +267,9 @@ class GeradorResposta:
                         ],
                     }
 
+            if geometry and not self._geometry_em_sp(geometry):
+                continue
+
             if geometry:
                 props = {
                     "texto": r.get("texto", "")[:200],
@@ -302,7 +308,9 @@ class GeradorResposta:
             sql = (
                 "SELECT ST_AsGeoJSON(geom) as geometry "
                 "FROM desmatamento_alertas "
-                "WHERE municipio ILIKE :mun AND geom IS NOT NULL"
+                "WHERE municipio ILIKE :mun "
+                "AND geom IS NOT NULL "
+                "AND UPPER(TRIM(uf)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')"
             )
             if data_ref:
                 sql += " AND CAST(data_avistamento AS TEXT) LIKE :data"
@@ -326,7 +334,10 @@ class GeradorResposta:
             params = {f"uid{i}": int(u) for i, u in enumerate(uids)}
             rows = executar_consulta(
                 f"SELECT uid, ST_AsGeoJSON(geom) as geometry "
-                f"FROM prodes_desmatamento WHERE uid IN ({placeholders}) AND geom IS NOT NULL",
+                f"FROM prodes_desmatamento "
+                f"WHERE uid IN ({placeholders}) "
+                f"AND geom IS NOT NULL "
+                f"AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
                 params,
             )
             for row in rows:
@@ -350,12 +361,20 @@ class GeradorResposta:
         # Queries em ordem de prioridade para encontrar centroide
         _queries = [
             "SELECT AVG(longitude) as lon, AVG(latitude) as lat "
-            "FROM queimadas WHERE municipio ILIKE :mun",
+            "FROM queimadas "
+            "WHERE municipio ILIKE :mun "
+            "AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
             "SELECT ST_X(ST_Centroid(ST_Collect(geom))) as lon, "
             "ST_Y(ST_Centroid(ST_Collect(geom))) as lat "
-            "FROM terras_indigenas WHERE municipio ILIKE :mun AND geom IS NOT NULL",
+            "FROM terras_indigenas "
+            "WHERE municipio ILIKE :mun "
+            "AND geom IS NOT NULL "
+            "AND UPPER(TRIM(uf)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
             "SELECT AVG(ST_X(ST_Centroid(geom))) as lon, AVG(ST_Y(ST_Centroid(geom))) as lat "
-            "FROM desmatamento_alertas WHERE municipio ILIKE :mun AND geom IS NOT NULL",
+            "FROM desmatamento_alertas "
+            "WHERE municipio ILIKE :mun "
+            "AND geom IS NOT NULL "
+            "AND UPPER(TRIM(uf)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
         ]
 
         centroides = {}
@@ -382,7 +401,10 @@ class GeradorResposta:
             try:
                 rows = executar_consulta(
                     "SELECT ST_AsGeoJSON(geom) as geometry, nome, fase "
-                    "FROM terras_indigenas WHERE nome = :nome AND geom IS NOT NULL",
+                    "FROM terras_indigenas "
+                    "WHERE nome = :nome "
+                    "AND geom IS NOT NULL "
+                    "AND UPPER(TRIM(uf)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
                     {"nome": nome},
                 )
                 for row in rows:
@@ -403,7 +425,10 @@ class GeradorResposta:
             params = {f"c{i}": c for i, c in enumerate(cods)}
             rows = executar_consulta(
                 f"SELECT cod_imovel, ST_AsGeoJSON(geom) as geometry "
-                f"FROM sicar_imoveis WHERE cod_imovel IN ({placeholders}) AND geom IS NOT NULL",
+                f"FROM sicar_imoveis "
+                f"WHERE cod_imovel IN ({placeholders}) "
+                f"AND geom IS NOT NULL "
+                f"AND CAST(cod_estado AS TEXT) IN ('35', 'SP')",
                 params,
             )
             for row in rows:
@@ -412,6 +437,62 @@ class GeradorResposta:
         except Exception:
             pass
         return geometrias
+
+    def _geometry_em_sp(self, geometry: dict | None) -> bool:
+        if not isinstance(geometry, dict):
+            return False
+
+        if geometry.get("type") == "GeometryCollection":
+            for geom in geometry.get("geometries", []):
+                if self._geometry_em_sp(geom):
+                    return True
+            return False
+
+        limites = self._limites_geometria(geometry.get("coordinates"))
+        if limites is None:
+            return False
+
+        min_lon, min_lat, max_lon, max_lat = limites
+        sp_min_lon, sp_min_lat, sp_max_lon, sp_max_lat = SP_BBOX
+        return not (
+            max_lon < sp_min_lon
+            or min_lon > sp_max_lon
+            or max_lat < sp_min_lat
+            or min_lat > sp_max_lat
+        )
+
+    def _limites_geometria(self, coords) -> tuple[float, float, float, float] | None:
+        limites = {"min_lon": None, "min_lat": None, "max_lon": None, "max_lat": None}
+
+        def _varrer(nodo):
+            if not isinstance(nodo, list) or not nodo:
+                return
+
+            primeiro = nodo[0]
+            if isinstance(primeiro, (int, float)):
+                if len(nodo) < 2:
+                    return
+                lon = float(nodo[0])
+                lat = float(nodo[1])
+                limites["min_lon"] = lon if limites["min_lon"] is None else min(limites["min_lon"], lon)
+                limites["max_lon"] = lon if limites["max_lon"] is None else max(limites["max_lon"], lon)
+                limites["min_lat"] = lat if limites["min_lat"] is None else min(limites["min_lat"], lat)
+                limites["max_lat"] = lat if limites["max_lat"] is None else max(limites["max_lat"], lat)
+                return
+
+            for item in nodo:
+                _varrer(item)
+
+        _varrer(coords)
+
+        if limites["min_lon"] is None:
+            return None
+        return (
+            limites["min_lon"],
+            limites["min_lat"],
+            limites["max_lon"],
+            limites["max_lat"],
+        )
 
     def _parse_metadados(self, registro: dict) -> dict:
         meta = registro.get("metadados_json")
