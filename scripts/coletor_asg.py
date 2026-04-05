@@ -356,11 +356,17 @@ def coletar_unidades_conservacao():
                     try:
                         gdf = gpd.read_file(shp_files[0], encoding="latin-1")
                         gdf = gdf.to_crs(epsg=4326)
-                        sp_mask = gdf.apply(
-                            lambda row: "SP" in str(row.drop("geometry").to_dict()).upper()
-                            or "PAULO" in str(row.drop("geometry").to_dict()).upper(),
-                            axis=1,
-                        )
+                        # Filtra por campo de UF quando disponível; fallback por bbox de SP
+                        uf_cols = [c for c in gdf.columns if c.upper() in ("UF", "SG_UF", "SIGLA_UF", "ESTADO")]
+                        if uf_cols:
+                            sp_mask = gdf[uf_cols[0]].str.upper().str.strip() == "SP"
+                        else:
+                            # Bounding box do estado de SP: lon -53.1..-44.1, lat -25.3..-19.8
+                            centroids = gdf.geometry.centroid
+                            sp_mask = (
+                                centroids.x.between(-53.1, -44.1)
+                                & centroids.y.between(-25.3, -19.8)
+                            )
                         gdf_sp = gdf[sp_mask].copy()
                         centroids = gdf_sp.geometry.centroid
                         for idx, row in gdf_sp.iterrows():
@@ -441,9 +447,16 @@ def extrair_dbf_basico(zip_file, dbf_nome, uf_filtro):
                     registro[nome] = ""
                 campo_pos += tam
 
-            texto_registro = json.dumps(registro).upper()
-            if uf_filtro.upper() in texto_registro or "PAULO" in texto_registro:
-                registros.append(registro)
+            # Prefere campo explícito de UF; caso ausente inclui tudo
+            # (geopandas já filtrou por bbox; DBF não tem coordenadas para refiltrar)
+            uf_valor = ""
+            for uf_col in ("UF", "SG_UF", "SIGLA_UF", "ESTADO"):
+                if uf_col in registro:
+                    uf_valor = registro[uf_col].strip().upper()
+                    break
+            if uf_valor and uf_valor != uf_filtro.upper():
+                continue
+            registros.append(registro)
 
     except Exception as e:
         logger.warning("Erro ao processar DBF: %s", e)

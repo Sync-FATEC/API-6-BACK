@@ -1,6 +1,6 @@
 {
   "titulo": "Coleta de Dados ASG - Estado de São Paulo",
-  "data_execucao": "2026-04-04T20:45:53.838514",
+  "data_execucao": "2026-04-05T20:24:18.578892",
   "fontes": [
     {
       "fonte": "FUNAI - Terras Indígenas",
@@ -18,13 +18,13 @@
       "fonte": "INPE/DETER - Desmatamento Amazônia",
       "registros": 0,
       "status": "OK",
-      "duracao_segundos": 2.0
+      "duracao_segundos": 2.4
     },
     {
       "fonte": "INPE/Queimadas - Focos de Incêndio",
-      "registros": 8011,
+      "registros": 8016,
       "status": "OK",
-      "duracao_segundos": 12.9
+      "duracao_segundos": 15.3
     },
     {
       "fonte": "INPE/PRODES - Desmatamento Anual",
@@ -34,33 +34,33 @@
     },
     {
       "fonte": "MMA/ICMBio - Unidades de Conservação",
-      "registros": 15,
+      "registros": 42,
       "status": "OK",
-      "duracao_segundos": 22.4
+      "duracao_segundos": 223.6
     },
     {
       "fonte": "SICAR - Cadastro Ambiental Rural",
-      "registros": 10000,
+      "registros": 0,
       "status": "OK",
-      "duracao_segundos": 6.2
+      "duracao_segundos": 0.6
     },
     {
       "fonte": "Palmares - Comunidades Quilombolas",
       "registros": 52,
       "status": "OK",
-      "duracao_segundos": 2.0
+      "duracao_segundos": 1.4
     }
   ],
-  "total_geral": 68145,
+  "total_geral": 58177,
   "arquivos_gerados": [
-    "sicar_imoveis_sp.json",
-    "deter_desmatamento_sp.json",
     "unidades_conservacao_sp.json",
     "resumo_coleta.json",
-    "queimadas_focos_sp.json",
-    "funai_terras_indigenas_sp.json",
-    "prodes_desmatamento_sp.json",
     "palmares_quilombolas_sp.json",
+    "deter_desmatamento_sp.json",
+    "sicar_imoveis_sp.json",
+    "prodes_desmatamento_sp.json",
+    "funai_terras_indigenas_sp.json",
+    "queimadas_focos_sp.json",
     "deter_amazonia_sp.json"
   ]
 }
