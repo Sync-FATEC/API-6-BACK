@@ -1,8 +1,8 @@
 """Schemas Pydantic para o endpoint de agendamento de atualização."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import Literal, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_serializer
 
 
 # Unidades de recorrência aceitas pelo endpoint
@@ -49,7 +49,8 @@ def recorrencia_para_cron(
         if data_base:
             if intervalo == 1:
                 return f"{m} {h} * * {_dia_semana_cron(data_base)}"
-            return f"{m} {h} {dia_base}-31/{intervalo * 7} * *"
+            # Para intervalo > 1, usa */dias (não anchora em dia_base que pode gerar range inválido)
+            return f"{m} {h} */{intervalo * 7} * *"
         if intervalo == 1:
             return f"{m} {h} * * 0"       # toda semana no domingo
         return f"{m} {h} */{intervalo * 7} * *"
@@ -132,6 +133,16 @@ class AgendamentoResponse(BaseModel):
     ultima_mensagem: Optional[str]
 
     model_config = {"from_attributes": True}
+
+    @field_serializer('criado_em', 'atualizado_em', 'ultima_execucao_em', when_used='json')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Adiciona timezone explicit (+00:00) às datas para conversão correta no frontend"""
+        if value is None:
+            return None
+        # Se não tem timezone, assume UTC
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
 
 
 class StatusExecucaoResponse(BaseModel):

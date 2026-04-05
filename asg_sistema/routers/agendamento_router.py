@@ -2,18 +2,19 @@
 Endpoints para agendamento de atualização da base de dados ASG.
 
 Rotas:
-  POST   /agendamentos/             → cria agendamento com recorrência simples
-  GET    /agendamentos/             → lista todos
-  GET    /agendamentos/{id}         → detalha um
-  PATCH  /agendamentos/{id}         → atualiza recorrência ou ativa/desativa
-  DELETE /agendamentos/{id}         → remove
-  GET    /agendamentos/{id}/status  → status da última execução
+  POST   /agendamentos/                → cria agendamento com recorrência simples
+  GET    /agendamentos/                → lista todos
+  GET    /agendamentos/{id}            → detalha um
+  PATCH  /agendamentos/{id}            → atualiza recorrência ou ativa/desativa
+  POST   /agendamentos/{id}/cancelar   → cancela agendamento (desativa + remove recorrências)
+  DELETE /agendamentos/{id}            → remove
+  GET    /agendamentos/{id}/status     → status da última execução
 """
 
 from datetime import datetime, time
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from asg_sistema.db.conexao import obter_sessao
@@ -38,6 +39,7 @@ router = APIRouter(prefix="/agendamentos", tags=["Agendamento de Atualização"]
 )
 def criar_agendamento(
     payload: AgendamentoCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(obter_sessao),
 ):
     """
@@ -63,7 +65,8 @@ def criar_agendamento(
     db.commit()
     db.refresh(agendamento)
 
-    registrar_job(agendamento.id, agendamento.cron_expressao)
+    # Registra o job em background para evitar problemas com AsyncIOScheduler
+    background_tasks.add_task(registrar_job, agendamento.id, agendamento.cron_expressao)
 
     return agendamento
 
@@ -97,6 +100,7 @@ def obter_agendamento(agendamento_id: int, db: Session = Depends(obter_sessao)):
 def atualizar_agendamento(
     agendamento_id: int,
     payload: AgendamentoUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(obter_sessao),
 ):
     """
@@ -134,9 +138,48 @@ def atualizar_agendamento(
     db.refresh(agendamento)
 
     if agendamento.ativo:
-        registrar_job(agendamento.id, agendamento.cron_expressao)
+        background_tasks.add_task(registrar_job, agendamento.id, agendamento.cron_expressao)
     else:
-        remover_job(agendamento.id)
+        background_tasks.add_task(remover_job, agendamento.id)
+
+    return agendamento
+
+
+@router.post(
+    "/{agendamento_id}/cancelar",
+    response_model=AgendamentoResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cancela um agendamento (desativa e remove recorrências)",
+)
+def cancelar_agendamento(agendamento_id: int, background_tasks: BackgroundTasks, db: Session = Depends(obter_sessao)):
+    """
+    Cancela um agendamento de forma completa.
+    
+    - Marca o agendamento como inativo
+    - Remove o job do scheduler (cancela todas as recorrências)
+    - Mantém o histórico do agendamento no banco (não o deleta)
+    
+    Diferente de DELETE que remove completamente, este endpoint apenas 
+    desativa o agendamento para preservar histórico.
+    """
+    agendamento = db.get(AgendamentoAtualizacao, agendamento_id)
+    if not agendamento:
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
+    
+    if not agendamento.ativo:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="O agendamento já foi cancelado.",
+        )
+
+    agendamento.ativo = False
+    agendamento.atualizado_em = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(agendamento)
+    
+    # Remove o job em background
+    background_tasks.add_task(remover_job, agendamento.id)
 
     return agendamento
 
@@ -146,14 +189,16 @@ def atualizar_agendamento(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove um agendamento",
 )
-def remover_agendamento(agendamento_id: int, db: Session = Depends(obter_sessao)):
+def remover_agendamento(agendamento_id: int, background_tasks: BackgroundTasks, db: Session = Depends(obter_sessao)):
     agendamento = db.get(AgendamentoAtualizacao, agendamento_id)
     if not agendamento:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
 
-    remover_job(agendamento.id)
     db.delete(agendamento)
     db.commit()
+    
+    # Remove o job em background
+    background_tasks.add_task(remover_job, agendamento_id)
 
 
 @router.get(

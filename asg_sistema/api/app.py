@@ -139,7 +139,7 @@ def executar_etl_api(
     
     repo_root = Path(__file__).resolve().parent.parent.parent
     script_etl = repo_root / "scripts" / "etl_pipeline.py"
-    script_sicar = repo_root / "scripts" / "sicar" / "coletar_sicar.py"
+    script_sicar = repo_root / "scripts" / "coletar_sicar.py"
 
     if not script_etl.exists():
         raise HTTPException(status_code=500, detail=f"Script ETL não encontrado em: {script_etl}")

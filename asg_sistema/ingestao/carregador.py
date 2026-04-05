@@ -282,7 +282,9 @@ def _carregar_ucs(caminho: Path):
 
     inseridos = 0
     for reg in registros:
-        uf = reg.get("UF", reg.get("uf", ""))
+        # O arquivo já é filtrado para SP na coleta; usa "SP" como default
+        # quando o campo UF não está presente no shapefile
+        uf = reg.get("UF", reg.get("uf", "SP"))
         if not _eh_sp(uf):
             continue
 
