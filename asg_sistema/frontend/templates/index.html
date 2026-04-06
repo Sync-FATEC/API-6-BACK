@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASG SP - Análise Ambiental, Social e Governança</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/css/estilo.css" />
+</head>
+<body>
+    <header>
+        <h1>ASG SP</h1>
+        <p>Sistema de Análise Ambiental, Social e Governança - Estado de São Paulo</p>
+    </header>
+
+    <main>
+        <section id="chat-panel">
+            <div id="mensagens">
+                <div class="msg sistema">
+                    Olá! Faça uma pergunta sobre dados ambientais, sociais ou de governança
+                    do Estado de São Paulo. Exemplos:
+                    <div class="exemplos">
+                        <button type="button" onclick="enviarExemplo(this)">Houve queimadas em Avaí nos últimos meses?</button>
+                        <button type="button" onclick="enviarExemplo(this)">Quais terras indígenas existem em Ubatuba?</button>
+                        <button type="button" onclick="enviarExemplo(this)">Unidades de conservação em Bertioga</button>
+                        <button type="button" onclick="enviarExemplo(this)">Qual a situação ambiental de Campinas?</button>
+                        <button type="button" onclick="enviarExemplo(this)">Comunidades quilombolas em Eldorado</button>
+                        <button type="button" onclick="enviarExemplo(this)">Desmatamento PRODES na Mata Atlântica</button>
+                    </div>
+                </div>
+            </div>
+            <form id="form-pergunta" onsubmit="enviarPergunta(event)">
+                <input type="text" id="input-pergunta" placeholder="Digite sua pergunta..." autocomplete="off" />
+                <button type="submit">Enviar</button>
+            </form>
+        </section>
+
+        <section id="mapa-panel">
+            <div id="mapa"></div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/js/mapa.js"></script>
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>

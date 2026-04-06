@@ -1,0 +1,180 @@
+"""FastAPI application factory."""
+
+import logging
+import subprocess
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import cast
+
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_geo
+from asg_sistema.db.conexao import SessionLocal, engine
+from asg_sistema.db.models import AgendamentoAtualizacao, Base
+from asg_sistema.routers.agendamento_router import router as agendamento_router
+from asg_sistema.scheduler.gerenciador import (
+    encerrar_scheduler,
+    iniciar_scheduler,
+    registrar_job,
+)
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+logger = logging.getLogger("uvicorn.error")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Pré-carregando modelo NLP...")
+    rotas_consulta.obter_interpretador()
+    logger.info("Modelo NLP pronto. Primeira requisição será rápida.")
+
+    Base.metadata.create_all(bind=engine)
+    iniciar_scheduler()
+
+    db = SessionLocal()
+    try:
+        agendamentos_ativos = (
+            db.query(AgendamentoAtualizacao)
+            .filter(AgendamentoAtualizacao.ativo)
+            .all()
+        )
+        for ag in agendamentos_ativos:
+            registrar_job(cast(int, ag.id), cast(str, ag.cron_expressao))
+    finally:
+        db.close()
+
+    yield
+    encerrar_scheduler()
+
+
+app = FastAPI(
+    title="ASG SP - Análise Ambiental, Social e Governança",
+    description="Sistema de consulta por linguagem natural a dados ASG do Estado de São Paulo",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(rotas_consulta.router, prefix="/api", tags=["Consulta"])
+app.include_router(rotas_banco.router, prefix="/api", tags=["Banco de dados"])
+app.include_router(rotas_dados.router, prefix="/api/dados", tags=["Dados"])
+app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
+app.include_router(agendamento_router, prefix="/api/v1")
+
+app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(FRONTEND_DIR / "templates"))
+
+
+@app.get("/", response_class=HTMLResponse)
+def pagina_inicial(request: Request):
+    return templates.TemplateResponse(request, "index.html")
+
+
+@app.get("/api/saude")
+def saude():
+    from asg_sistema.db import repositorio
+    try:
+        contagens = repositorio.contar_por_tabela()
+        return {"status": "ok", "contagens": contagens}
+    except Exception as e:
+        return {"status": "erro", "detalhe": str(e)}
+
+
+def _entrada_historico_etl_valida(reg: dict) -> bool:
+    """Descarta duplicata antiga: registro vazio com sucesso=true (bug do main() + salvar extra)."""
+    etapas = reg.get("etapas") or []
+    erros = reg.get("erros") or []
+    if not etapas and not erros and reg.get("sucesso") is True:
+        return False
+    return True
+
+
+@app.get("/api/etl/historico")
+def historico_etl():
+    """Retorna historico das execucoes do pipeline ETL."""
+    import json as _json
+
+    log_path = Path(__file__).resolve().parent.parent.parent / "logs" / "historico_etl.jsonl"
+    if not log_path.exists():
+        return {"execucoes": [], "total": 0}
+    execucoes = []
+    with open(log_path, "r", encoding="utf-8") as f:
+        for linha in f:
+            linha = linha.strip()
+            if not linha:
+                continue
+            reg = _json.loads(linha)
+            if _entrada_historico_etl_valida(reg):
+                execucoes.append(reg)
+    execucoes.reverse()
+    return {"execucoes": execucoes[:20], "total": len(execucoes)}
+
+
+@app.post("/api/etl/executar")
+def executar_etl_api(
+    background_tasks: BackgroundTasks, 
+    etapa: str = "full", 
+    skip_sicar: bool = False
+):
+    """Dispara execucao do pipeline ETL via API."""
+    
+    from asg_sistema.api.etl_cooldown import (
+        assegurar_cooldown_disparo_etl_api,
+        registrar_disparo_etl_api,
+    )
+
+    assegurar_cooldown_disparo_etl_api()
+    
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    script_etl = repo_root / "scripts" / "etl_pipeline.py"
+    script_sicar = repo_root / "scripts" / "coletar_sicar.py"
+
+    if not script_etl.exists():
+        raise HTTPException(status_code=500, detail=f"Script ETL não encontrado em: {script_etl}")
+
+    def _rodar_pipeline():
+        try:
+            if not skip_sicar:
+                print(f"[INFO] Iniciando coleta SICAR: {script_sicar}")
+                subprocess.run(
+                    [sys.executable, str(script_sicar)],
+                    cwd=str(repo_root),
+                    check=True
+                )
+            else:
+                print("[INFO] Pulando a coleta do SICAR (skip_sicar=True).")
+            
+            print(f"[INFO] Iniciando pipeline ETL (etapa: {etapa}): {script_etl}")
+            subprocess.run(
+                [sys.executable, str(script_etl), "--etapa", etapa],
+                cwd=str(repo_root),
+                check=True
+            )
+            print("[INFO] Pipeline ETL finalizado com sucesso pela API.")
+            
+        except subprocess.CalledProcessError as e:
+            print(f"[ERRO] O subprocesso falhou com código {e.returncode}. Comando: {e.cmd}")
+        except Exception as e:
+            print(f"[ERRO] Falha inesperada no worker do ETL: {e}")
+
+    background_tasks.add_task(_rodar_pipeline)
+    
+    registrar_disparo_etl_api()
+    
+    return {
+        "status": "iniciado", 
+        "etapa": etapa, 
+        "skip_sicar": skip_sicar
+    }
