@@ -1,9 +1,10 @@
 """Carrega dados dos JSONs coletados para o PostgreSQL.
-Insere nas tabelas estruturadas e gera o corpus textualizado.
+Insere nas tabelas estruturadas e gera o corpus textualizado de forma incremental.
 """
 
 import json
 import logging
+import hashlib
 from datetime import datetime
 from pathlib import Path
 
@@ -21,16 +22,33 @@ from asg_sistema.ingestao.textualizador import (
 logger = logging.getLogger(__name__)
 
 
-def carregar_tudo(caminho_dados: Path):
-    logger.info("Iniciando carga de dados ASG...")
+def carregar_tudo(caminho_dados: Path, entidades: list[str] = None):
+    if entidades is None:
+        entidades = ["tudo"]
+        
+    logger.info(f"Iniciando carga ASG (Entidades: {entidades})...")
+    
     _garantir_coluna_uf_corpus()
-    _carregar_queimadas(caminho_dados / "queimadas_focos_sp.json")
-    _carregar_funai(caminho_dados / "funai_terras_indigenas_sp.json")
-    _carregar_deter(caminho_dados / "deter_desmatamento_sp.json")
-    _carregar_ucs(caminho_dados / "unidades_conservacao_sp.json")
-    _carregar_prodes(caminho_dados / "prodes_desmatamento_sp.json")
-    _carregar_palmares(caminho_dados / "palmares_quilombolas_sp.json")
-    _carregar_sicar(caminho_dados / "geojson" / "SP_AREA_IMOVEL.geojson")
+
+    if "tudo" in entidades or "queimadas" in entidades:
+        _carregar_queimadas(caminho_dados / "queimadas_focos_sp.json")
+        
+    if "tudo" in entidades or "terras_indigenas" in entidades:
+        _carregar_funai(caminho_dados / "funai_terras_indigenas_sp.json")
+        
+    if "tudo" in entidades or "desmatamentos" in entidades:
+        _carregar_deter(caminho_dados / "deter_desmatamento_sp.json")
+        _carregar_prodes(caminho_dados / "prodes_desmatamento_sp.json")
+        
+    if "tudo" in entidades or "unidades_conservacao" in entidades:
+        _carregar_ucs(caminho_dados / "unidades_conservacao_sp.json")
+        
+    if "tudo" in entidades or "quilombos" in entidades:
+        _carregar_palmares(caminho_dados / "palmares_quilombolas_sp.json")
+        
+    if "tudo" in entidades or "sicar" in entidades:
+        _carregar_sicar(caminho_dados / "geojson" / "SP_AREA_IMOVEL.geojson")
+
     logger.info("Carga finalizada.")
 
 
@@ -56,10 +74,14 @@ def _inserir_corpus(doc: dict):
     if not _eh_sp(uf_sigla):
         raise ValueError("uf_sigla ausente ou invalida no corpus_asg (esperado: SP)")
 
+    conteudo_base = f"{doc['tipo_registro']}_{doc['municipio']}_{doc['texto']}"
+    hash_reg = hashlib.md5(conteudo_base.encode('utf-8')).hexdigest()
+
     executar_sql(
         """INSERT INTO corpus_asg
-        (fonte, tipo_registro, uf_sigla, municipio, data_referencia, texto, metadados_json)
-        VALUES (:fonte, :tipo, :uf_sigla, :municipio, :data_ref, :texto, :meta)""",
+        (fonte, tipo_registro, uf_sigla, municipio, data_referencia, texto, metadados_json, hash_registro)
+        VALUES (:fonte, :tipo, :uf_sigla, :municipio, :data_ref, :texto, :meta, :hash_reg)
+        ON CONFLICT (hash_registro) DO NOTHING""",
         {
             "fonte": doc["fonte"],
             "tipo": doc["tipo_registro"],
@@ -68,6 +90,7 @@ def _inserir_corpus(doc: dict):
             "data_ref": doc["data_referencia"],
             "texto": doc["texto"],
             "meta": json.dumps(doc["metadados_json"], ensure_ascii=False),
+            "hash_reg": hash_reg
         },
     )
 
@@ -75,8 +98,10 @@ def _inserir_corpus(doc: dict):
 def _garantir_coluna_uf_corpus():
     executar_sql("ALTER TABLE corpus_asg ADD COLUMN IF NOT EXISTS uf_sigla VARCHAR(5)")
     executar_sql("UPDATE corpus_asg SET uf_sigla = 'SP' WHERE uf_sigla IS NULL OR TRIM(uf_sigla) = ''")
-    executar_sql("ALTER TABLE corpus_asg ALTER COLUMN uf_sigla DROP DEFAULT")
-    executar_sql("ALTER TABLE corpus_asg ALTER COLUMN uf_sigla SET NOT NULL")
+    try:
+        executar_sql("ALTER TABLE corpus_asg ALTER COLUMN uf_sigla SET NOT NULL")
+    except Exception:
+        pass
     executar_sql("CREATE INDEX IF NOT EXISTS idx_corpus_uf_sigla ON corpus_asg(uf_sigla)")
 
 
@@ -103,11 +128,9 @@ def _eh_sp(valor: str | None) -> bool:
 def _eh_cod_estado_sp(valor) -> bool:
     if valor is None:
         return False
-
     texto = str(valor).strip().upper()
     if texto in {"SP", "SAO PAULO", "SÃO PAULO", "35", "035"}:
         return True
-
     try:
         return int(float(texto)) == 35
     except (ValueError, TypeError):
@@ -142,7 +165,8 @@ def _carregar_queimadas(caminho: Path):
                     :risco, :prec,
                     CASE WHEN :lat IS NOT NULL AND :lon IS NOT NULL
                          THEN ST_SetSRID(ST_MakePoint(:lon, :lat), 4674)
-                         ELSE NULL END)""",
+                         ELSE NULL END)
+            ON CONFLICT (data_hora, latitude, longitude) DO NOTHING""",
             {
                 "fid": fonte_id,
                 "lat": lat,
@@ -163,10 +187,7 @@ def _carregar_queimadas(caminho: Path):
         _inserir_corpus(doc)
         inseridos += 1
 
-        if (i + 1) % 2000 == 0:
-            logger.info("  %d/%d queimadas inseridas", i + 1, len(registros))
-
-    logger.info("Queimadas: %d registros carregados", inseridos)
+    logger.info("Queimadas: %d registros processados", inseridos)
 
 
 def _carregar_funai(caminho: Path):
@@ -192,7 +213,9 @@ def _carregar_funai(caminho: Path):
             """INSERT INTO terras_indigenas
             (fonte_id, codigo, nome, etnia, municipio, uf, area_ha, fase, modalidade, geom)
             VALUES (:fid, :cod, :nome, :etnia, :mun, :uf, :area, :fase, :mod,
-                    ST_SetSRID(ST_GeomFromGeoJSON(:geom), 4674))""",
+                    ST_SetSRID(ST_GeomFromGeoJSON(:geom), 4674))
+            ON CONFLICT (codigo) DO UPDATE 
+            SET area_ha = EXCLUDED.area_ha, fase = EXCLUDED.fase, geom = EXCLUDED.geom""",
             {
                 "fid": fonte_id,
                 "cod": props.get("terrai_codigo"),
@@ -213,7 +236,7 @@ def _carregar_funai(caminho: Path):
         _inserir_corpus(doc)
         inseridos += 1
 
-    logger.info("FUNAI: %d registros carregados", inseridos)
+    logger.info("FUNAI: %d registros processados", inseridos)
 
 
 def _carregar_deter(caminho: Path):
@@ -244,7 +267,8 @@ def _carregar_deter(caminho: Path):
                     :area, :area_uc, :uc,
                     CASE WHEN CAST(:geom AS TEXT) IS NOT NULL
                          THEN ST_SetSRID(ST_GeomFromGeoJSON(CAST(:geom AS TEXT)), 4674)
-                         ELSE NULL END)""",
+                         ELSE NULL END)
+            ON CONFLICT (data_avistamento, municipio, area_total_km2) DO NOTHING""",
             {
                 "fid": fonte_id,
                 "cls": props.get("classname", ""),
@@ -265,7 +289,7 @@ def _carregar_deter(caminho: Path):
         _inserir_corpus(doc)
         inseridos += 1
 
-    logger.info("DETER: %d registros carregados", inseridos)
+    logger.info("DETER: %d registros processados", inseridos)
 
 
 def _carregar_ucs(caminho: Path):
@@ -282,8 +306,6 @@ def _carregar_ucs(caminho: Path):
 
     inseridos = 0
     for reg in registros:
-        # O arquivo já é filtrado para SP na coleta; usa "SP" como default
-        # quando o campo UF não está presente no shapefile
         uf = reg.get("UF", reg.get("uf", "SP"))
         if not _eh_sp(uf):
             continue
@@ -291,7 +313,8 @@ def _carregar_ucs(caminho: Path):
         executar_sql(
             """INSERT INTO unidades_conservacao
             (fonte_id, nome, categoria, grupo, esfera, uf, municipio, area_ha)
-            VALUES (:fid, :nome, :cat, :grupo, :esfera, :uf, :mun, :area)""",
+            VALUES (:fid, :nome, :cat, :grupo, :esfera, :uf, :mun, :area)
+            ON CONFLICT (nome, esfera) DO NOTHING""",
             {
                 "fid": fonte_id,
                 "nome": reg.get("NOME", reg.get("nome", "")),
@@ -300,9 +323,7 @@ def _carregar_ucs(caminho: Path):
                 "esfera": reg.get("ESFERA", reg.get("esfera", "")),
                 "uf": _normalizar_uf(uf),
                 "mun": reg.get("MUNICIPIO", reg.get("municipio", "")),
-                "area": _para_float(
-                    reg.get("AREA_HA", reg.get("area_ha"))
-                ),
+                "area": _para_float(reg.get("AREA_HA", reg.get("area_ha"))),
             },
         )
 
@@ -311,7 +332,7 @@ def _carregar_ucs(caminho: Path):
         _inserir_corpus(doc)
         inseridos += 1
 
-    logger.info("UCs: %d registros carregados", inseridos)
+    logger.info("UCs: %d registros processados", inseridos)
 
 
 def _carregar_prodes(caminho: Path):
@@ -326,7 +347,7 @@ def _carregar_prodes(caminho: Path):
     features = dados.get("features", [])
     logger.info("Carregando %d registros PRODES...", len(features))
 
-    AMOSTRA_CORPUS = 50  # insere no corpus 1 a cada N registros
+    AMOSTRA_CORPUS = 50
 
     inseridos = 0
     corpus_inseridos = 0
@@ -345,7 +366,8 @@ def _carregar_prodes(caminho: Path):
                     :dt, :ano, :area, :bioma, :sat, :sensor,
                     CASE WHEN CAST(:geom AS TEXT) IS NOT NULL
                          THEN ST_SetSRID(ST_GeomFromGeoJSON(CAST(:geom AS TEXT)), 4674)
-                         ELSE NULL END)""",
+                         ELSE NULL END)
+            ON CONFLICT (uid) DO NOTHING""",
             {
                 "fid": fonte_id,
                 "uid": props.get("uid"),
@@ -368,9 +390,6 @@ def _carregar_prodes(caminho: Path):
             doc["uf_sigla"] = "SP"
             _inserir_corpus(doc)
             corpus_inseridos += 1
-
-        if (i + 1) % 5000 == 0:
-            logger.info("  %d/%d PRODES inseridos", i + 1, len(features))
 
     logger.info("PRODES: %d registros na tabela, %d amostras no corpus", inseridos, corpus_inseridos)
 
@@ -405,7 +424,8 @@ def _carregar_palmares(caminho: Path):
             """INSERT INTO comunidades_quilombolas
             (fonte_id, municipio, uf, comunidade, codigo_ibge,
              processo_fcp, ano_certificacao, processo_incra, regiao)
-            VALUES (:fid, :mun, :uf, :com, :ibge, :proc, :ano, :incra, :regiao)""",
+            VALUES (:fid, :mun, :uf, :com, :ibge, :proc, :ano, :incra, :regiao)
+            ON CONFLICT (comunidade, municipio) DO NOTHING""",
             {
                 "fid": fonte_id,
                 "mun": municipio,
@@ -424,7 +444,7 @@ def _carregar_palmares(caminho: Path):
         _inserir_corpus(doc)
         inseridos += 1
 
-    logger.info("Palmares: %d registros carregados", inseridos)
+    logger.info("Palmares: %d registros processados", inseridos)
 
 
 def _carregar_sicar(caminho_geojson: Path):
@@ -463,6 +483,10 @@ def _carregar_sicar(caminho_geojson: Path):
                  THEN ST_SetSRID(ST_GeomFromGeoJSON(CAST(:geom AS TEXT)), 4674)
                  ELSE NULL END
         )
+        ON CONFLICT (cod_imovel) DO UPDATE 
+        SET ind_status = EXCLUDED.ind_status, 
+            dat_atualizacao = EXCLUDED.dat_atualizacao, 
+            geom = EXCLUDED.geom
     """
 
     BATCH_SIZE = 1000
@@ -506,14 +530,13 @@ def _carregar_sicar(caminho_geojson: Path):
             executar_sql_many(sql, batch)
             inseridos += len(batch)
             batch = []
-            logger.info("  %d imoveis inseridos", inseridos)
+            logger.info("  %d imoveis processados", inseridos)
 
     if batch:
         executar_sql_many(sql, batch)
         inseridos += len(batch)
 
-    logger.info("SICAR: %d registros elegiveis em SP (de %d no arquivo)", elegiveis_sp, total)
-    logger.info("SICAR: %d registros na tabela, %d amostras no corpus", inseridos, corpus_total)
+    logger.info("SICAR: %d registros processados na tabela, %d amostras no corpus", inseridos, corpus_total)
 
 
 def _para_float(valor) -> float | None:

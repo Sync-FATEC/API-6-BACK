@@ -1,4 +1,6 @@
-from asg_sistema.db.conexao import executar_consulta
+from datetime import datetime
+
+from asg_sistema.db.conexao import executar_consulta, executar_sql
 
 
 def busca_vetorial(
@@ -119,3 +121,48 @@ def contar_por_tabela() -> dict:
 
 def buscar_fontes() -> list[dict]:
     return executar_consulta("SELECT * FROM fontes ORDER BY id")
+
+def atualizar_data_coleta_fontes(entidades: list[str], data_atualizacao: datetime):
+    """
+    Atualiza a data_coleta e sincroniza o total_registros na tabela 'fontes'
+    baseado nas entidades que foram processadas no ETL.
+    """
+    mapa_nomes = {
+        "queimadas": "Queimadas (INPE)",
+        "terras_indigenas": "Terras Indígenas (FUNAI)",
+        "desmatamento_alertas": "Alertas DETER",
+        "unidades_conservacao": "Unidades de Conservação",
+        "prodes_desmatamento": "PRODES (INPE)",
+        "comunidades_quilombolas": "Quilombos",
+        "sicar": "SICAR SP"
+    }
+
+    for ent in entidades:
+        if ent == "tudo":
+            sql_data = "UPDATE fontes SET data_coleta = :dt"
+            executar_sql(sql_data, {"dt": data_atualizacao})
+            continue
+
+        nome_na_fonte = mapa_nomes.get(ent)
+        if nome_na_fonte:
+            sql_update = """
+                UPDATE fontes 
+                SET data_coleta = :dt 
+                WHERE nome ILIKE :nome
+            """
+            executar_consulta(sql_update, {"dt": data_atualizacao, "nome": f"%{nome_na_fonte}%"})
+
+def obter_resumo_fontes() -> dict:
+    """
+    Retorna o resumo lendo diretamente da tabela Fontes.
+    """
+    rows = executar_consulta("SELECT nome, data_coleta, total_registros FROM fontes")
+    
+    resumo = {}
+    for r in rows:
+        nome_chave = r["nome"].lower().replace(" ", "_")
+        resumo[nome_chave] = {
+            "contagem": r["total_registros"] or 0,
+            "ultima_atualizacao": r["data_coleta"].isoformat() if r["data_coleta"] else "N/A"
+        }
+    return resumo

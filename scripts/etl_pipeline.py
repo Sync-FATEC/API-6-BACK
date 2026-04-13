@@ -47,10 +47,12 @@ logger = logging.getLogger("etl_pipeline")
 class RegistroETL:
     """Registra cada execucao do pipeline para rastreabilidade."""
 
-    def __init__(self):
+    def __init__(self, etapa_solicitada: str = "full", entidades_solicitadas: list = None):
         self.inicio = datetime.now()
         self.etapas = []
         self.erros = []
+        self.etapa_solicitada = etapa_solicitada
+        self.entidades_solicitadas = entidades_solicitadas or ["tudo"]
 
     def registrar_etapa(self, nome: str, status: str, registros: int = 0, duracao_s: float = 0):
         self.etapas.append({
@@ -62,7 +64,11 @@ class RegistroETL:
         })
 
     def registrar_erro(self, etapa: str, erro: str):
-        self.erros.append({"etapa": etapa, "erro": erro, "timestamp": datetime.now().isoformat()})
+        self.erros.append({
+            "etapa": etapa, 
+            "erro": erro, 
+            "timestamp": datetime.now().isoformat()
+        })
 
     def salvar(self):
         registro = {
@@ -70,6 +76,26 @@ class RegistroETL:
             "inicio": self.inicio.isoformat(),
             "fim": datetime.now().isoformat(),
             "duracao_total_segundos": round((datetime.now() - self.inicio).total_seconds(), 1),
+            "etapa_solicitada": self.etapa_solicitada,
+            "entidades": self.entidades_solicitadas,
+            "etapas": self.etapas,
+            "erros": self.erros,
+            "sucesso": len(self.erros) == 0,
+        }
+        historico_path = LOG_DIR / "historico_etl.jsonl"
+        with open(historico_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(registro, ensure_ascii=False) + "\n")
+        logger.info("Registro salvo em %s", historico_path)
+        return registro
+
+def salvar(self):
+        registro = {
+            "pipeline": "ETL ASG-SP",
+            "inicio": self.inicio.isoformat(),
+            "fim": datetime.now().isoformat(),
+            "duracao_total_segundos": round((datetime.now() - self.inicio).total_seconds(), 1),
+            "etapa_solicitada": self.etapa_solicitada,
+            "entidades": self.entidades_solicitadas,
             "etapas": self.etapas,
             "erros": self.erros,
             "sucesso": len(self.erros) == 0,
@@ -81,17 +107,20 @@ class RegistroETL:
         return registro
 
 
-def etapa_extract(registro: RegistroETL) -> bool:
+def etapa_extract(registro: RegistroETL, entidades: list) -> bool:
     """EXTRACT: Coleta dados de todas as fontes publicas."""
     logger.info("=" * 60)
-    logger.info("ETAPA 1/4: EXTRACT - Coletando dados das APIs publicas")
+    logger.info(f"ETAPA 1/4: EXTRACT - Coletando dados (Entidades: {entidades})")
     logger.info("=" * 60)
     inicio = time.time()
 
     try:
         coletor_path = Path(__file__).resolve().parent / "coletor_asg.py"
+        
+        cmd = [sys.executable, str(coletor_path), "--entidades"] + entidades
+        
         resultado = subprocess.run(
-            [sys.executable, str(coletor_path)],
+            cmd,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -128,24 +157,21 @@ def etapa_extract(registro: RegistroETL) -> bool:
         return False
 
 
-def etapa_transform_load(registro: RegistroETL) -> bool:
+def etapa_transform_load(registro: RegistroETL, entidades: list) -> bool:
     """TRANSFORM + LOAD: Textualiza e carrega no PostgreSQL."""
     logger.info("=" * 60)
-    logger.info("ETAPA 2/4: TRANSFORM + LOAD - Textualizando e carregando no banco")
+    logger.info("ETAPA 2/4: TRANSFORM + LOAD - Inserindo dados NOVOS no banco")
     logger.info("=" * 60)
     inicio = time.time()
 
     try:
         from asg_sistema.config import config
-        from asg_sistema.db.conexao import executar_sql, executar_consulta
-
-        logger.info("Limpando tabelas existentes...")
-        for tabela in ["corpus_asg", "queimadas", "desmatamento_alertas", "unidades_conservacao", "terras_indigenas", "prodes_desmatamento", "comunidades_quilombolas", "sicar_imoveis", "fontes"]:            
-            executar_sql(f"DELETE FROM {tabela}")
-        logger.info("Tabelas limpas.")
-
+        from asg_sistema.db.conexao import executar_consulta
         from asg_sistema.ingestao.carregador import carregar_tudo
-        carregar_tudo(config.caminho_dados)
+
+        logger.info("Atualizando tabelas com registros recentes...")
+        
+        carregar_tudo(config.caminho_dados, entidades)
 
         contagens = {}
         for tabela in ["queimadas", "terras_indigenas", "desmatamento_alertas", "unidades_conservacao", "prodes_desmatamento", "comunidades_quilombolas", "sicar_imoveis", "corpus_asg"]:            
@@ -319,19 +345,19 @@ def etapa_validacao(registro: RegistroETL) -> bool:
         return False
 
 
-def pipeline_completo():
+def pipeline_completo(etapa: str, entidades: list):
     """Executa o pipeline ETL completo."""
     logger.info("=" * 60)
     logger.info("PIPELINE ETL ASG-SP - Inicio: %s", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     logger.info("=" * 60)
 
-    registro = RegistroETL()
+    registro = RegistroETL(etapa_solicitada=etapa, entidades_solicitadas=entidades)
 
-    ok_extract = etapa_extract(registro)
+    ok_extract = etapa_extract(registro, entidades)
     if not ok_extract:
         logger.warning("Extract falhou, tentando carregar dados existentes...")
 
-    ok_load = etapa_transform_load(registro)
+    ok_load = etapa_transform_load(registro, entidades)
     if not ok_load:
         logger.error("Transform+Load falhou. Abortando pipeline.")
         registro.salvar()
@@ -368,8 +394,10 @@ def main():
     parser = argparse.ArgumentParser(description="Pipeline ETL do Sistema ASG-SP")
     parser.add_argument("--etapa", choices=["extract", "load", "embed", "validate", "full"], default="full",
                         help="Etapa a executar (default: full)")
+    parser.add_argument("--entidades", nargs="+", default=["tudo"], help="Entidades para processar")
     parser.add_argument("--agendar", type=int, metavar="HORAS",
                         help="Roda em loop a cada N horas")
+    
     args = parser.parse_args()
 
     if args.agendar:
@@ -377,18 +405,19 @@ def main():
         return
 
     if args.etapa == "full":
-        pipeline_completo()
+        pipeline_completo(args.etapa, args.entidades)
         return
 
-    registro = RegistroETL()
+    registro = RegistroETL(etapa_solicitada=args.etapa, entidades_solicitadas=args.entidades)
     if args.etapa == "extract":
-        etapa_extract(registro)
+        etapa_extract(registro, args.entidades)
     elif args.etapa == "load":
-        etapa_transform_load(registro)
+        etapa_transform_load(registro, args.entidades)
     elif args.etapa == "embed":
         etapa_vetorizacao(registro)
     elif args.etapa == "validate":
         etapa_validacao(registro)
+    
     registro.salvar()
 
 
