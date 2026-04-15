@@ -1,6 +1,52 @@
+import json
 from datetime import datetime
 
 from asg_sistema.db.conexao import executar_consulta, executar_sql
+
+
+def buscar_municipio_por_cod_imovel(cod_imovel: str) -> str | None:
+    """Município do imóvel SICAR (para restringir outras fontes quando o usuário informa o CAR)."""
+    cod = (cod_imovel or "").strip()
+    if not cod:
+        return None
+    rows = executar_consulta(
+        """SELECT municipio FROM sicar_imoveis
+           WHERE LOWER(TRIM(cod_imovel)) = LOWER(TRIM(:cod)) LIMIT 1""",
+        {"cod": cod},
+    )
+    if not rows:
+        return None
+    m = rows[0].get("municipio")
+    return str(m).strip() if m else None
+
+
+def buscar_imovel_rural_por_cod(cod_imovel: str) -> dict | None:
+    """Retorna um imóvel rural (SICAR) pelo cod_imovel, com geometria em GeoJSON."""
+    cod = (cod_imovel or "").strip()
+    if not cod:
+        return None
+    rows = executar_consulta(
+        """SELECT id, fonte_id, cod_imovel, cod_tema, nom_tema, ind_status, ind_tipo,
+                  des_condic, municipio, cod_estado, num_area, mod_fiscal,
+                  dat_criacao, dat_atualizacao,
+                  ST_AsGeoJSON(geom) AS geometry_json
+           FROM sicar_imoveis
+           WHERE LOWER(TRIM(cod_imovel)) = LOWER(TRIM(:cod))
+           LIMIT 1""",
+        {"cod": cod},
+    )
+    if not rows:
+        return None
+    row = dict(rows[0])
+    gj = row.pop("geometry_json", None)
+    if gj and isinstance(gj, str):
+        try:
+            row["geometry"] = json.loads(gj)
+        except json.JSONDecodeError:
+            row["geometry"] = None
+    else:
+        row["geometry"] = None
+    return row
 
 
 def busca_vetorial(
@@ -12,6 +58,7 @@ def busca_vetorial(
     data_inicio: str | None = None,
     data_fim: str | None = None,
     limite: int = 15,
+    cod_imovel: str | None = None,
 ) -> list[dict]:
     filtros = ["UPPER(TRIM(uf_sigla)) = :uf_sigla"]
     params = {"emb": embedding_str, "limite": limite, "uf_sigla": uf_sigla.upper().strip()}
@@ -36,6 +83,9 @@ def busca_vetorial(
     if data_fim:
         filtros.append("data_referencia <= :data_fim")
         params["data_fim"] = data_fim
+    if cod_imovel and fonte == "sicar":
+        filtros.append("LOWER(TRIM(metadados_json->>'cod_imovel')) = LOWER(TRIM(:cod_imovel))")
+        params["cod_imovel"] = cod_imovel.strip()
 
     where = ""
     if filtros:
@@ -111,7 +161,7 @@ def busca_vetorial_prodes_uids(
 def contar_por_tabela() -> dict:
     tabelas = ["queimadas", "terras_indigenas", "desmatamento_alertas",
                "unidades_conservacao", "prodes_desmatamento",
-               "comunidades_quilombolas", "corpus_asg"]
+               "comunidades_quilombolas", "sicar_imoveis", "corpus_asg"]
     contagens = {}
     for t in tabelas:
         resultado = executar_consulta(f"SELECT COUNT(*) as total FROM {t}")

@@ -1,5 +1,6 @@
 """Orquestrador: recebe pergunta do usuario e retorna resposta completa."""
 
+import re
 import time
 
 from asg_sistema.pln.preprocessador import PreprocessadorPLN
@@ -35,6 +36,21 @@ KEYWORDS_INTENCAO = {
     "consultar_unidade_conservacao": ["conservação", "conservacao", "parque", "reserva", "apa", "icmbio"],
     "consultar_quilombola": ["quilombo", "quilombola", "palmares"],
     "consultar_prodes": ["prodes"],
+    "consultar_imovel_rural": [
+        "fazenda",
+        "fazendas",
+        "sítio",
+        "sitio",
+        "chácara",
+        "chacara",
+        "imovel rural",
+        "imóvel rural",
+        "cadastro ambiental",
+        "sicar",
+        "codigo car",
+        "código car",
+        "propriedade rural",
+    ],
 }
 
 
@@ -55,19 +71,52 @@ class InterpretadorConsulta:
         self.gerador = gerador
         self.top_k = top_k
 
-    def processar(self, pergunta: str) -> dict:
+    @staticmethod
+    def _texto_para_classificacao(pergunta: str) -> str:
+        """Alinha expressões coloquiais (ex.: fazenda) ao vocabulário de treino (imóvel rural / CAR)."""
+        t = pergunta
+        pares = [
+            (r"\bfazendas?\b", "imóvel rural"),
+            (r"\bsítios?\b", "imóvel rural"),
+            (r"\bsitios?\b", "imóvel rural"),
+            (r"\bchácaras?\b", "imóvel rural"),
+            (r"\bchacaras?\b", "imóvel rural"),
+            (r"\bestâncias?\b", "imóvel rural"),
+            (r"\bestancias?\b", "imóvel rural"),
+            (r"\bpropriedades?\s+rurais?\b", "imóvel rural"),
+        ]
+        for padrao, repl in pares:
+            t = re.sub(padrao, repl, t, flags=re.IGNORECASE)
+        return t
+
+    def _filtros_geograficos_entidades(self, entidades: dict) -> dict:
+        return {
+            "municipios": entidades.get("municipios", []),
+            "periodo": entidades.get("periodo", {}),
+            "cod_imovel": entidades.get("cod_imovel"),
+        }
+
+    def processar(self, pergunta: str, cod_imovel: str | None = None) -> dict:
         inicio = time.time()
 
+        texto_clf = self._texto_para_classificacao(pergunta)
         preprocessado = self.preprocessador.preprocessar(pergunta)
-        intencao, confianca = self.classificador.classificar(pergunta)
+        intencao, confianca = self.classificador.classificar(texto_clf)
 
         if confianca < 0.3 or intencao not in MAPA_INTENCAO_FONTE:
+            ent_prev = {}
+            if cod_imovel and str(cod_imovel).strip():
+                ent_prev["cod_imovel"] = str(cod_imovel).strip()
             return {
                 "pergunta": pergunta,
                 "intencao_detectada": "fora_do_escopo",
                 "confianca": round(confianca, 3) if confianca else 0,
-                "entidades": {},
-                "resumo": "Não encontrei informações relacionadas à sua pergunta. Tente consultar sobre queimadas, desmatamento, terras indígenas, unidades de conservação ou comunidades quilombolas no Estado de São Paulo.",
+                "entidades": ent_prev,
+                "resumo": (
+                    "Não encontrei informações relacionadas à sua pergunta. Tente consultar sobre queimadas, "
+                    "desmatamento, terras indígenas, unidades de conservação, comunidades quilombolas, "
+                    "imóveis rurais (CAR/SICAR) ou resumo municipal no Estado de São Paulo."
+                ),
                 "estatisticas": {},
                 "dados": [],    
                 "fontes": [],
@@ -81,6 +130,12 @@ class InterpretadorConsulta:
             }
 
         entidades = self.extrator_entidades.extrair(pergunta)
+        if cod_imovel and str(cod_imovel).strip():
+            entidades["cod_imovel"] = str(cod_imovel).strip()
+        if entidades.get("cod_imovel"):
+            mun_sicar = repositorio.buscar_municipio_por_cod_imovel(entidades["cod_imovel"])
+            if mun_sicar and not entidades.get("municipios"):
+                entidades["municipios"] = [mun_sicar]
 
         # Detectar intenções secundárias via keywords
         intencoes_secundarias = self._detectar_intencoes_secundarias(
@@ -126,7 +181,9 @@ class InterpretadorConsulta:
         if not candidatos:
             return []
 
-        todas_probs = self.classificador.classificar_multiplo(pergunta, limiar=0.10)
+        todas_probs = self.classificador.classificar_multiplo(
+            self._texto_para_classificacao(pergunta), limiar=0.10
+        )
         prob_map = {i: c for i, c in todas_probs}
 
         secundarias = []
@@ -144,8 +201,7 @@ class InterpretadorConsulta:
         filtros = {
             "fonte": MAPA_INTENCAO_FONTE.get(intencao) if not fontes_multiplas else None,
             "fontes": fontes_multiplas,
-            "municipios": entidades.get("municipios", []),
-            "periodo": entidades.get("periodo", {}),
+            **self._filtros_geograficos_entidades(entidades),
         }
 
         if fontes_multiplas:
@@ -241,8 +297,7 @@ class InterpretadorConsulta:
             "fonte": MAPA_INTENCAO_FONTE.get(intencao) if not fontes_multiplas else None,
             "fontes": fontes_multiplas,
             "uf_sigla": config.uf_escopo,
-            "municipios": entidades.get("municipios", []),
-            "periodo": entidades.get("periodo", {}),
+            **self._filtros_geograficos_entidades(entidades),
         }
 
         entidades_resumo = entidades
