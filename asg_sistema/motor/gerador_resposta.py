@@ -60,6 +60,7 @@ class GeradorResposta:
             "consultar_unidade_conservacao": "unidades de conservação",
             "consultar_quilombola": "comunidades quilombolas",
             "consultar_prodes": "desmatamento PRODES",
+            "consultar_imovel_rural": "imóveis rurais (CAR/SICAR)",
             "resumo_municipal": "dados ASG",
         }
 
@@ -71,6 +72,7 @@ class GeradorResposta:
             "consultar_unidade_conservacao": {"icmbio"},
             "consultar_quilombola": {"palmares"},
             "consultar_prodes": {"prodes"},
+            "consultar_imovel_rural": {"sicar"},
             "resumo_municipal": set(),
         }
 
@@ -101,6 +103,9 @@ class GeradorResposta:
         if total == 0:
             return f"Nenhum resultado encontrado para sua consulta{local}."
 
+        cod_car = entidades.get("cod_imovel")
+        sufixo_car = f" (imóvel CAR {cod_car})" if cod_car else ""
+
         resumos = {
             "consultar_queimadas": f"Foram encontrados {total} registros de focos de queimada{local}.",
             "consultar_desmatamento": f"Foram encontrados {total} registros de desmatamento (DETER/PRODES){local}.",
@@ -108,7 +113,9 @@ class GeradorResposta:
             "consultar_unidade_conservacao": f"Foram encontradas {total} unidades de conservação{local}.",
             "consultar_quilombola": f"Foram encontradas {total} comunidades quilombolas{local}.",
             "consultar_prodes": f"Foram encontrados {total} registros de desmatamento PRODES{local}.",
-            "consultar_imovel_rural": f"Foram encontrados {total} imóveis rurais cadastrados no CAR{local}.",
+            "consultar_imovel_rural": (
+                f"Foram encontrados {total} imóveis rurais cadastrados no CAR{local}{sufixo_car}."
+            ),
             "resumo_municipal": f"Foram encontrados {total} registros ASG{local}.",
         }
         return resumos.get(intencao, f"Foram encontrados {total} resultados{local}.")

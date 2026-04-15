@@ -5,6 +5,11 @@ from pydantic import BaseModel, Field
 
 class ConsultaRequest(BaseModel):
     pergunta: str = Field(..., min_length=1, max_length=500)
+    cod_imovel: str | None = Field(
+        default=None,
+        max_length=260,
+        description="Código CAR / cod_imovel (SICAR) do imóvel rural para contextualizar a consulta.",
+    )
 
 
 class ConsultaResponse(BaseModel):

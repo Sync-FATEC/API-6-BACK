@@ -57,7 +57,7 @@ def consultar(req: ConsultaRequest):
     import json
     try:
         interpretador = obter_interpretador()
-        resposta = interpretador.processar(req.pergunta)
+        resposta = interpretador.processar(req.pergunta, cod_imovel=req.cod_imovel)
         return JSONResponse(
             content=json.loads(json.dumps(resposta, ensure_ascii=False, default=str)),
             media_type="application/json; charset=utf-8",

@@ -1,6 +1,6 @@
 """Rotas REST para consulta estruturada de dados."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from asg_sistema.db.conexao import executar_consulta
 from asg_sistema.db import repositorio
@@ -68,6 +68,18 @@ def listar_desmatamento(municipio: str | None = Query(None)):
             ORDER BY data_avistamento DESC""",
         params,
     )
+
+
+@router.get("/imovel-rural/{cod_imovel:path}")
+def obter_imovel_rural_por_cod(cod_imovel: str):
+    """Retorna dados do imóvel rural (SICAR/CAR) pelo cod_imovel, incluindo geometria GeoJSON."""
+    row = repositorio.buscar_imovel_rural_por_cod(cod_imovel)
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail="Imóvel rural não encontrado para este código CAR / cod_imovel.",
+        )
+    return row
 
 
 @router.get("/unidades-conservacao")
