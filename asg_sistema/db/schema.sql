@@ -172,4 +172,5 @@ ALTER TABLE corpus_asg ALTER COLUMN uf_sigla SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_corpus_fonte ON corpus_asg(fonte);
 CREATE INDEX IF NOT EXISTS idx_corpus_uf_sigla ON corpus_asg(uf_sigla);
-CREATE INDEX IF NOT EXISTS idx_corpus_municipio ON
+CREATE INDEX IF NOT EXISTS idx_corpus_municipio ON corpus_asg(municipio);
+CREATE INDEX IF NOT EXISTS idx_corpus_data ON corpus_asg(data_referencia);

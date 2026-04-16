@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_geo, rotas_pipeline
+from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_geo, rotas_pipeline, rotas_dashboard
 from asg_sistema.db.conexao import SessionLocal, engine
 from asg_sistema.db.models import AgendamentoAtualizacao, Base
 from asg_sistema.routers.agendamento_router import router as agendamento_router
@@ -79,6 +79,7 @@ app.include_router(rotas_banco.router, prefix="/api", tags=["Banco de dados"])
 app.include_router(rotas_dados.router, prefix="/api/dados", tags=["Dados"])
 app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
 app.include_router(rotas_pipeline.router, prefix="/api/etl", tags=["Pipeline ETL"])
+app.include_router(rotas_dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(agendamento_router, prefix="/api/v1")
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "static")), name="static")
