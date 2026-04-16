@@ -43,6 +43,7 @@ class GeradorResposta:
             "fontes": self._extrair_fontes(resultados),
             "geojson": geojson,
             "total_resultados": total_geo,
+            "nota_risco": self._calcular_nota_risco(resultados),
         }
 
     def gerar_resposta_car(self, pergunta: str, imovel: dict, cruzamento: dict) -> dict:
@@ -328,6 +329,136 @@ class GeradorResposta:
             "resumo_municipal": f"Foram encontrados {total} registros ASG{local}.",
         }
         return resumos.get(intencao, f"Foram encontrados {total} resultados{local}.")
+
+    def _calcular_nota_risco(self, resultados: list[dict]) -> dict:
+        """Calcula nota de risco socioambiental de 0 a 100 com fatores contribuintes."""
+        if not resultados:
+            return {"nota": 0, "nivel": "sem_dados", "fatores": [], "por_dimensao": {}}
+
+        por_fonte: dict[str, list] = {}
+        for r in resultados:
+            fonte = r.get("fonte", "")
+            por_fonte.setdefault(fonte, []).append(r)
+
+        fatores: list[str] = []
+        por_dimensao: dict[str, int] = {}
+        pontos = 0.0
+
+        # Queimadas: até 40 pontos
+        queimadas = por_fonte.get("queimadas", [])
+        if queimadas:
+            n = len(queimadas)
+            pts_q = min(n * 4, 25)
+
+            frps = []
+            for r in queimadas:
+                meta = self._parse_metadados(r)
+                try:
+                    frp = float(meta.get("frp") or 0)
+                    if frp > 0:
+                        frps.append(frp)
+                except (ValueError, TypeError):
+                    pass
+
+            if frps:
+                frp_medio = sum(frps) / len(frps)
+                pts_q += min(frp_medio / 10, 15)
+                fatores.append(f"{n} foco(s) de queimada com FRP médio de {frp_medio:.1f} MW")
+            else:
+                fatores.append(f"{n} foco(s) de queimada detectado(s)")
+
+            alto_risco = sum(
+                1 for r in queimadas
+                if str(self._parse_metadados(r).get("risco_fogo", "")).lower()
+                in ("alto", "crítico", "critico")
+            )
+            if alto_risco:
+                pts_q += 5
+                fatores.append(f"{alto_risco} foco(s) com risco de fogo classificado como alto")
+
+            dim = round(min(pts_q, 40))
+            por_dimensao["queimadas"] = dim
+            pontos += dim
+
+        # Desmatamento DETER/PRODES: até 40 pontos
+        deter = por_fonte.get("deter", [])
+        prodes = por_fonte.get("prodes", [])
+        desflorestamentos = deter + prodes
+        if desflorestamentos:
+            n = len(desflorestamentos)
+            area_total = 0.0
+            for r in desflorestamentos:
+                meta = self._parse_metadados(r)
+                try:
+                    area = float(
+                        meta.get("area_km2")
+                        or meta.get("area_km")
+                        or meta.get("area_total_km2")
+                        or 0
+                    )
+                    area_total += area
+                except (ValueError, TypeError):
+                    pass
+
+            pts_d = min(n * 5, 20)
+            if area_total > 0:
+                pts_d += min(area_total * 2, 20)
+                fatores.append(
+                    f"{n} alerta(s) de desmatamento cobrindo {area_total:.1f} km²"
+                )
+            else:
+                fatores.append(f"{n} alerta(s) de desmatamento detectado(s)")
+
+            dim = round(min(pts_d, 40))
+            por_dimensao["desmatamento"] = dim
+            pontos += dim
+
+        # Terras indígenas: até 10 pontos
+        funai = por_fonte.get("funai", [])
+        if funai:
+            n = len(funai)
+            dim = round(min(n * 3, 10))
+            fatores.append(f"{n} terra(s) indígena(s) na área de consulta")
+            por_dimensao["terras_indigenas"] = dim
+            pontos += dim
+
+        # Unidades de conservação: até 5 pontos
+        icmbio = por_fonte.get("icmbio", [])
+        if icmbio:
+            n = len(icmbio)
+            dim = round(min(n * 2, 5))
+            fatores.append(f"{n} unidade(s) de conservação presente(s) na área")
+            por_dimensao["unidades_conservacao"] = dim
+            pontos += dim
+
+        # Quilombolas: até 5 pontos
+        palmares = por_fonte.get("palmares", [])
+        if palmares:
+            n = len(palmares)
+            dim = round(min(n * 2, 5))
+            fatores.append(f"{n} comunidade(s) quilombola(s) identificada(s)")
+            por_dimensao["quilombolas"] = dim
+            pontos += dim
+
+        nota = min(round(pontos), 100)
+
+        if nota == 0:
+            nivel = "sem_dados"
+        elif nota < 25:
+            nivel = "baixo"
+        elif nota < 50:
+            nivel = "moderado"
+        elif nota < 75:
+            nivel = "alto"
+        else:
+            nivel = "critico"
+
+        return {
+            "nota": nota,
+            "nivel": nivel,
+            "fatores": fatores,
+            "por_dimensao": por_dimensao,
+        }
 
     def _calcular_estatisticas(self, intencao: str, resultados: list[dict],
                                total_geo: int = 0) -> dict:
