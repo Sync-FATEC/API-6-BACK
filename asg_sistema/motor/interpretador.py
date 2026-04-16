@@ -96,6 +96,35 @@ class InterpretadorConsulta:
             "cod_imovel": entidades.get("cod_imovel"),
         }
 
+    @staticmethod
+    def _exportacao_vazia(pergunta: str, intencao: str, entidades: dict) -> dict:
+        return {
+            "resumo": {"texto": "", "total_itens": 0},
+            "nota_asg": {"valor": 0, "nivel": "sem_dados", "fatores": [], "por_dimensao": {}},
+            "tabela": {
+                "colunas": [
+                    "fonte",
+                    "tipo_registro",
+                    "municipio",
+                    "data_referencia",
+                    "similaridade",
+                    "descricao",
+                    "metadados",
+                ],
+                "linhas": [],
+                "total_linhas": 0,
+            },
+            "metadados": {
+                "versao_payload": "1.0",
+                "pergunta_original": pergunta,
+                "intencao_detectada": intencao,
+                "total_resultados": 0,
+                "fontes_consideradas": [],
+                "fontes_detalhes": [],
+                "entidades": entidades,
+            },
+        }
+
     def processar(self, pergunta: str, cod_imovel: str | None = None) -> dict:
         inicio = time.time()
 
@@ -127,6 +156,9 @@ class InterpretadorConsulta:
                     "tokens_limpos": preprocessado["tokens_limpos"],
                     "stems": preprocessado["stems"],
                 },
+                "exportacao_relatorio": self._exportacao_vazia(
+                    pergunta, "fora_do_escopo", ent_prev
+                ),
             }
 
         entidades = self.extrator_entidades.extrair(pergunta)
@@ -327,6 +359,10 @@ class InterpretadorConsulta:
                     "fontes": [],
                     "geojson": None,
                     "total_resultados": 0,
+                    "nota_risco": {"nota": 0, "nivel": "sem_dados", "fatores": [], "por_dimensao": {}},
+                    "exportacao_relatorio": self._exportacao_vazia(
+                        pergunta, "consultar_imovel_rural", {"codigos_car": [cod_car]}
+                    ),
                 }
 
             # Fallback: busca semântica normal filtrada pelo município do imóvel

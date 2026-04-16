@@ -1,6 +1,7 @@
 """Gera respostas rastreavies com resumo, estatisticas, fontes e GeoJSON."""
 
 import json
+from datetime import datetime
 
 
 SP_BBOX = (-53.2, -25.4, -44.1, -19.8)
@@ -32,7 +33,8 @@ class GeradorResposta:
         else:
             resumo = self._gerar_resumo(intencao, total_geo, entidades)
 
-        return {
+        nota_risco = self._calcular_nota_risco(resultados)
+        resposta = {
             "pergunta": pergunta,
             "intencao_detectada": intencao,
             "confianca": round(confianca, 3),
@@ -43,8 +45,20 @@ class GeradorResposta:
             "fontes": self._extrair_fontes(resultados),
             "geojson": geojson,
             "total_resultados": total_geo,
-            "nota_risco": self._calcular_nota_risco(resultados),
+            "nota_risco": nota_risco,
         }
+        resposta["exportacao_relatorio"] = self._montar_exportacao_relatorio(
+            pergunta=pergunta,
+            intencao=intencao,
+            resumo=resumo,
+            nota_risco=nota_risco,
+            dados_origem=resultados,
+            dados=self._normalizar_linhas_tabela(resultados),
+            fontes=resposta["fontes"],
+            total_resultados=total_geo,
+            entidades=entidades,
+        )
+        return resposta
 
     def gerar_resposta_car(self, pergunta: str, imovel: dict, cruzamento: dict) -> dict:
         """Gera resposta completa para consulta por código CAR com cruzamento espacial."""
@@ -230,7 +244,7 @@ class GeradorResposta:
                 }.get(fonte_id, fonte_id)
                 fontes_usadas.append({"nome": nome, "identificador": fonte_id})
 
-        return {
+        resposta = {
             "pergunta": pergunta,
             "intencao_detectada": "consultar_imovel_rural",
             "confianca": 0.95,
@@ -253,6 +267,176 @@ class GeradorResposta:
             "fontes": fontes_usadas,
             "geojson": geojson,
             "total_resultados": len(features),
+        }
+        nota_risco = self._calcular_nota_risco_para_car(cruzamento)
+        resposta["nota_risco"] = nota_risco
+        resposta["exportacao_relatorio"] = self._montar_exportacao_relatorio(
+            pergunta=pergunta,
+            intencao="consultar_imovel_rural",
+            resumo=resumo,
+            nota_risco=nota_risco,
+            dados_origem=ameacas,
+            dados=self._normalizar_linhas_tabela_car(ameacas),
+            fontes=fontes_usadas,
+            total_resultados=len(ameacas),
+            entidades={"codigos_car": [cod]},
+            imovel=imovel,
+        )
+        return resposta
+
+    def _calcular_nota_risco_para_car(self, cruzamento: dict) -> dict:
+        """Calcula nota de risco consolidada para análise baseada em imóvel CAR."""
+        pontos = 0.0
+        fatores = []
+        por_dimensao: dict[str, int] = {}
+
+        q = cruzamento.get("queimadas", {})
+        focos = int(q.get("focos_total") or 0)
+        if focos > 0:
+            frp = float(q.get("frp_medio") or 0)
+            pts_q = min(focos * 3, 25) + min(frp / 10, 10)
+            dim = round(min(pts_q, 35))
+            por_dimensao["queimadas"] = dim
+            pontos += dim
+            fatores.append(f"{focos} foco(s) de queimada na vizinhança do imóvel")
+
+        d = cruzamento.get("deter", {})
+        alertas = int(d.get("total_alertas") or 0)
+        if alertas > 0:
+            area_deter = float(d.get("area_intersecao_km2") or 0)
+            pts_d = min(alertas * 4, 20) + min(area_deter * 5, 15)
+            dim = round(min(pts_d, 35))
+            por_dimensao["desmatamento_deter"] = dim
+            pontos += dim
+            fatores.append(f"{alertas} alerta(s) DETER nas proximidades")
+
+        p = cruzamento.get("prodes", {})
+        poligonos = int(p.get("total_poligonos") or 0)
+        if poligonos > 0:
+            area_prodes = float(p.get("area_hist_km2") or 0)
+            pts_p = min(poligonos * 3, 15) + min(area_prodes * 5, 15)
+            dim = round(min(pts_p, 30))
+            por_dimensao["desmatamento_prodes"] = dim
+            pontos += dim
+            fatores.append(f"{poligonos} polígono(s) PRODES próximos ao imóvel")
+
+        ti = cruzamento.get("terras_indigenas", {})
+        if ti.get("sobrepoe"):
+            por_dimensao["territorios_sensiveis"] = 10
+            pontos += 10
+            fatores.append("Há sobreposição com terra indígena")
+        elif ti.get("proximas_10km"):
+            por_dimensao["territorios_sensiveis"] = 5
+            pontos += 5
+            fatores.append("Há terras indígenas em raio de 10km")
+
+        nota = min(round(pontos), 100)
+        if nota == 0:
+            nivel = "sem_dados"
+        elif nota < 25:
+            nivel = "baixo"
+        elif nota < 50:
+            nivel = "moderado"
+        elif nota < 75:
+            nivel = "alto"
+        else:
+            nivel = "critico"
+
+        return {
+            "nota": nota,
+            "nivel": nivel,
+            "fatores": fatores,
+            "por_dimensao": por_dimensao,
+        }
+
+    def _normalizar_linhas_tabela(self, resultados: list[dict]) -> list[dict]:
+        linhas = []
+        for r in resultados:
+            meta = self._parse_metadados(r)
+            linhas.append({
+                "fonte": r.get("fonte", ""),
+                "tipo_registro": r.get("tipo_registro", ""),
+                "municipio": r.get("municipio", ""),
+                "data_referencia": str(r.get("data_referencia", "") or ""),
+                "similaridade": round(float(r.get("similaridade") or 0), 4),
+                "descricao": r.get("texto", ""),
+                "metadados": meta,
+            })
+        return linhas
+
+    def _normalizar_linhas_tabela_car(self, ameacas: list[dict]) -> list[dict]:
+        linhas = []
+        for item in ameacas:
+            linhas.append({
+                "fonte": item.get("tipo", ""),
+                "tipo_registro": item.get("tipo", ""),
+                "municipio": "",
+                "data_referencia": "",
+                "similaridade": None,
+                "descricao": json.dumps(item, ensure_ascii=False, default=str),
+                "metadados": item,
+            })
+        return linhas
+
+    def _montar_exportacao_relatorio(
+        self,
+        pergunta: str,
+        intencao: str,
+        resumo: str,
+        nota_risco: dict,
+        dados_origem: list[dict],
+        dados: list[dict],
+        fontes: list[dict],
+        total_resultados: int,
+        entidades: dict,
+        imovel: dict | None = None,
+    ) -> dict:
+        """Payload estável para geração de relatório via Jinja2/PDF."""
+        tabela = {
+            "colunas": [
+                "fonte",
+                "tipo_registro",
+                "municipio",
+                "data_referencia",
+                "similaridade",
+                "descricao",
+                "metadados",
+            ],
+            "linhas": dados,
+            "total_linhas": len(dados),
+        }
+        metadados = {
+            "gerado_em": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "versao_payload": "1.0",
+            "pergunta_original": pergunta,
+            "intencao_detectada": intencao,
+            "total_resultados": total_resultados,
+            "total_registros_origem": len(dados_origem),
+            "fontes_consideradas": [f.get("identificador") for f in fontes],
+            "fontes_detalhes": fontes,
+            "entidades": entidades,
+        }
+        if imovel:
+            metadados["imovel"] = {
+                "cod_imovel": imovel.get("cod_imovel", ""),
+                "municipio": imovel.get("municipio", ""),
+                "area_ha": round(float(imovel.get("area_ha_calc") or imovel.get("num_area") or 0), 2),
+                "status": imovel.get("ind_status", ""),
+            }
+
+        return {
+            "resumo": {
+                "texto": resumo,
+                "total_itens": total_resultados,
+            },
+            "nota_asg": {
+                "valor": int(nota_risco.get("nota") or 0),
+                "nivel": nota_risco.get("nivel", "sem_dados"),
+                "fatores": nota_risco.get("fatores", []),
+                "por_dimensao": nota_risco.get("por_dimensao", {}),
+            },
+            "tabela": tabela,
+            "metadados": metadados,
         }
 
     def _gerar_resumo_multiplo(self, intencoes: list[dict], total: int,

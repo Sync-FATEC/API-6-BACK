@@ -26,3 +26,4 @@ class ConsultaResponse(BaseModel):
     tempo_processamento_ms: float
     preprocessamento: dict | None = None
     nota_risco: dict | None = None
+    exportacao_relatorio: dict | None = None
