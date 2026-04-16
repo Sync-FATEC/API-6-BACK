@@ -132,17 +132,24 @@ class InterpretadorConsulta:
         entidades = self.extrator_entidades.extrair(pergunta)
         if cod_imovel and str(cod_imovel).strip():
             entidades["cod_imovel"] = str(cod_imovel).strip()
-        if entidades.get("cod_imovel"):
-            mun_sicar = repositorio.buscar_municipio_por_cod_imovel(entidades["cod_imovel"])
-            if mun_sicar and not entidades.get("municipios"):
-                entidades["municipios"] = [mun_sicar]
 
+        # Unificar: se tem cod_imovel mas não tem codigos_car, usar cod_imovel
+        cod_car_final = None
+        if entidades.get("codigos_car"):
+            cod_car_final = entidades["codigos_car"][0]
+        elif entidades.get("cod_imovel"):
+            cod_car_final = entidades["cod_imovel"]
+
+        # Caminho principal: código CAR → cruzamento espacial direto
+        # Fallback: se imóvel não tem geometria → busca semântica por município
+        if cod_car_final:
+            resposta = self._processar_consulta_car(
+                pergunta, cod_car_final, entidades, preprocessado, intencao, confianca,
+            )
         # Detectar intenções secundárias via keywords
-        intencoes_secundarias = self._detectar_intencoes_secundarias(
+        elif (intencoes_secundarias := self._detectar_intencoes_secundarias(
             pergunta, intencao
-        )
-
-        if intencoes_secundarias:
+        )):
             resposta = self._processar_intencoes_multiplas(
                 pergunta, preprocessado, intencao, confianca,
                 intencoes_secundarias, entidades,
@@ -287,6 +294,56 @@ class InterpretadorConsulta:
         )
         resposta["intencoes_detectadas"] = lista_intencoes
         return resposta
+
+    def _processar_consulta_car(
+        self, pergunta: str, cod_car: str, entidades: dict,
+        preprocessado: dict, intencao: str, confianca: float,
+    ) -> dict:
+        """Busca direta por código CAR + cruzamento espacial.
+
+        Fallback: se imóvel não encontrado ou sem geometria,
+        usa busca semântica filtrada por município (pipeline normal).
+        """
+        import json
+
+        imovel = repositorio.buscar_imovel_por_car(cod_car)
+
+        # Sem geometria → fallback para busca semântica por município
+        if not imovel or not imovel.get("geometry"):
+            # Tenta achar pelo menos o município
+            mun = repositorio.buscar_municipio_por_cod_imovel(cod_car)
+            if mun and not entidades.get("municipios"):
+                entidades["municipios"] = [mun]
+
+            if not imovel and not mun:
+                return {
+                    "pergunta": pergunta,
+                    "intencao_detectada": "consultar_imovel_rural",
+                    "confianca": 0.95,
+                    "entidades": {"codigos_car": [cod_car]},
+                    "resumo": f"Nenhum imóvel rural com código CAR {cod_car} foi encontrado no banco de dados.",
+                    "estatisticas": {},
+                    "dados": [],
+                    "fontes": [],
+                    "geojson": None,
+                    "total_resultados": 0,
+                }
+
+            # Fallback: busca semântica normal filtrada pelo município do imóvel
+            return self._processar_intencao_unica(
+                pergunta, preprocessado, intencao, confianca, entidades,
+            )
+
+        geom_json = json.dumps(imovel["geometry"])
+        municipio = imovel.get("municipio", "")
+
+        cruzamento = repositorio.cruzamento_espacial_imovel(geom_json, municipio)
+
+        return self.gerador.gerar_resposta_car(
+            pergunta=pergunta,
+            imovel=imovel,
+            cruzamento=cruzamento,
+        )
 
     def _processar_intencao_unica(
         self, pergunta, preprocessado, intencao, confianca, entidades,

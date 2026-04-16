@@ -1,24 +1,66 @@
 {
   "titulo": "Coleta de Dados ASG - Estado de São Paulo",
-  "data_execucao": "2026-04-12T18:56:07.750367",
+  "data_execucao": "2026-04-15T20:47:22.582656",
   "fontes": [
     {
-      "fonte": "MMA/ICMBio - Unidades de Conservação",
-      "registros": 42,
+      "fonte": "FUNAI - Terras Indígenas",
+      "registros": 29,
       "status": "OK",
-      "duracao_segundos": 47.8
+      "duracao_segundos": 1.4
+    },
+    {
+      "fonte": "INPE/DETER - Desmatamento Cerrado",
+      "registros": 38,
+      "status": "OK",
+      "duracao_segundos": 1.7
+    },
+    {
+      "fonte": "INPE/DETER - Desmatamento Amazônia",
+      "registros": 0,
+      "status": "OK",
+      "duracao_segundos": 2.7
+    },
+    {
+      "fonte": "INPE/PRODES - Desmatamento Anual",
+      "registros": 50000,
+      "status": "OK",
+      "duracao_segundos": 22.8
+    },
+    {
+      "fonte": "INPE/Queimadas - Focos de Incêndio",
+      "registros": 8426,
+      "status": "OK",
+      "duracao_segundos": 14.5
+    },
+    {
+      "fonte": "MMA/ICMBio - Unidades de Conservação",
+      "registros": 2742,
+      "status": "OK",
+      "duracao_segundos": 130.4
+    },
+    {
+      "fonte": "SICAR - Cadastro Ambiental Rural",
+      "registros": 0,
+      "status": "OK",
+      "duracao_segundos": 0.8
+    },
+    {
+      "fonte": "Palmares - Comunidades Quilombolas",
+      "registros": 52,
+      "status": "OK",
+      "duracao_segundos": 2.0
     }
   ],
-  "total_geral": 42,
+  "total_geral": 61287,
   "arquivos_gerados": [
-    "sicar_imoveis_sp.json",
+    "deter_amazonia_sp.json",
     "deter_desmatamento_sp.json",
-    "unidades_conservacao_sp.json",
-    "resumo_coleta.json",
-    "queimadas_focos_sp.json",
     "funai_terras_indigenas_sp.json",
-    "prodes_desmatamento_sp.json",
     "palmares_quilombolas_sp.json",
-    "deter_amazonia_sp.json"
+    "prodes_desmatamento_sp.json",
+    "queimadas_focos_sp.json",
+    "resumo_coleta.json",
+    "sicar_imoveis_sp.json",
+    "unidades_conservacao_sp.json"
   ]
 }
