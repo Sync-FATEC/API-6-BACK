@@ -2,7 +2,6 @@
 Carrega valores do arquivo .env sem necessidade de alterar codigo-fonte.
 """
 
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -31,6 +30,8 @@ class Configuracao(BaseSettings):
     api_porta: int = 8000
 
     env: str = "development"
+    etl_retry_intervalo_segundos: int | None = None
+    etl_retry_max_tentativas: int = 3
 
     class Config:
         env_file = _ENV_FILE
@@ -59,6 +60,14 @@ class Configuracao(BaseSettings):
     @property
     def etl_api_cooldown_segundos(self) -> int:
         return 3600 if self.env == "production" else 5
+
+    @property
+    def etl_retry_intervalo_erro_api_segundos(self) -> int:
+        """Intervalo entre retentativas quando uma API externa está indisponível."""
+        if self.etl_retry_intervalo_segundos is not None:
+            return self.etl_retry_intervalo_segundos
+        # Em produção mantém 1 hora; em dev/testes reduz para 2 minutos.
+        return 3600 if self.env == "production" else 120
 
 
 config = Configuracao()
