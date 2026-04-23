@@ -121,7 +121,8 @@ def historico_etl():
 def executar_etl_api(
     background_tasks: BackgroundTasks, 
     etapa: EtapaETL = Query(default=EtapaETL.full, description="Escolha a etapa do pipeline"),
-    entidades: list[EntidadeETL] = Query(default=[EntidadeETL.tudo], description="Escolha as entidades para processar")
+    entidades: list[EntidadeETL] = Query(default=[EntidadeETL.tudo], description="Escolha as entidades para processar"),
+    skip_sicar: bool = Query(default=False, description="Skip SICAR collection")
 ):
     """Dispara execução do pipeline ETL via API."""
     global pipeline_status
@@ -156,7 +157,7 @@ def executar_etl_api(
         try:
             entidades_str = [e.value for e in entidades] 
             
-            if "tudo" in entidades_str or "sicar" in entidades_str: 
+            if not skip_sicar and ("tudo" in entidades_str or "sicar" in entidades_str): 
                 print(f"[INFO] Iniciando coleta SICAR: {script_sicar}")
                 current_process = subprocess.Popen([sys.executable, str(script_sicar)], cwd=str(repo_root))
                 current_process.wait()
