@@ -14,6 +14,7 @@ Fontes:
 
 import json
 import os
+import argparse
 import csv
 import io
 import time
@@ -22,6 +23,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Callable
 
 import requests
 
@@ -33,6 +35,340 @@ BBOX_SP = "-53.2,-25.4,-44.1,-19.8"
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
+
+MAX_TENTATIVAS_PADRAO = 3
+RETRY_BASE_SEGUNDOS = 2
+STATUS_ENV_PATH = "ETL_STATUS_PATH"
+STATUS_ENV_EXECUTION_ID = "ETL_EXECUTION_ID"
+STATUS_ENV_MAX_TENTATIVAS = "ETL_MAX_TENTATIVAS"
+
+
+def _agora_iso() -> str:
+    return datetime.now().isoformat()
+
+
+def _caminho_status_execucao() -> Path | None:
+    caminho = os.getenv(STATUS_ENV_PATH, "").strip()
+    if not caminho:
+        return None
+    return Path(caminho)
+
+
+def _carregar_status_execucao() -> dict:
+    caminho = _caminho_status_execucao()
+    if caminho is None or not caminho.exists():
+        return {}
+
+    try:
+        with open(caminho, "r", encoding="utf-8") as f:
+            conteudo = json.load(f)
+            if isinstance(conteudo, dict):
+                return conteudo
+    except Exception as e:
+        logger.debug("Nao foi possivel carregar status ETL: %s", e)
+    return {}
+
+
+def _salvar_status_execucao(status: dict):
+    caminho = _caminho_status_execucao()
+    if caminho is None:
+        return
+
+    try:
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        with open(caminho, "w", encoding="utf-8") as f:
+            json.dump(status, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.debug("Nao foi possivel salvar status ETL: %s", e)
+
+
+def _status_execucao_base() -> dict:
+    return {
+        "execution_id": os.getenv(STATUS_ENV_EXECUTION_ID, ""),
+        "pipeline": "ETL ASG-SP",
+        "status_execucao": "em_andamento",
+        "mensagem": "Coleta em andamento.",
+        "fontes": [],
+        "eventos": [],
+        "erros": [],
+        "finalizado": False,
+    }
+
+
+def _registrar_evento_status(
+    tipo: str,
+    mensagem: str,
+    fonte: str | None = None,
+    tentativa: int | None = None,
+    max_tentativas: int | None = None,
+    erro: str | None = None,
+    aguardar_segundos: int | None = None,
+):
+    status = _carregar_status_execucao() or _status_execucao_base()
+    eventos = status.get("eventos")
+    if not isinstance(eventos, list):
+        eventos = []
+
+    evento = {
+        "timestamp": _agora_iso(),
+        "tipo": tipo,
+        "mensagem": mensagem,
+    }
+    if fonte is not None:
+        evento["fonte"] = fonte
+    if tentativa is not None:
+        evento["tentativa"] = tentativa
+    if max_tentativas is not None:
+        evento["max_tentativas"] = max_tentativas
+    if erro is not None:
+        evento["erro"] = erro
+    if aguardar_segundos is not None:
+        evento["aguardar_segundos"] = aguardar_segundos
+
+    eventos.append(evento)
+    status["eventos"] = eventos
+    status["mensagem"] = mensagem
+    status["atualizado_em"] = _agora_iso()
+    _salvar_status_execucao(status)
+
+
+def _atualizar_status_fonte(
+    fonte: str,
+    status_fonte: str,
+    registros: int | None = None,
+    tentativa_atual: int | None = None,
+    tentativas: int | None = None,
+    max_tentativas: int | None = None,
+    duracao_segundos: float | None = None,
+    historico_tentativas: list[dict] | None = None,
+    mensagem: str | None = None,
+    mensagem_final: str | None = None,
+    erro: str | None = None,
+):
+    status = _carregar_status_execucao() or _status_execucao_base()
+    fontes = status.get("fontes")
+    if not isinstance(fontes, list):
+        fontes = []
+
+    idx = next((i for i, item in enumerate(fontes) if item.get("fonte") == fonte), -1)
+    atual = fontes[idx] if idx >= 0 else {"fonte": fonte}
+
+    atual["status"] = status_fonte
+    atual["atualizado_em"] = _agora_iso()
+
+    if registros is not None:
+        atual["registros"] = registros
+    if tentativa_atual is not None:
+        atual["tentativa_atual"] = tentativa_atual
+    if tentativas is not None:
+        atual["tentativas"] = tentativas
+    if max_tentativas is not None:
+        atual["max_tentativas"] = max_tentativas
+    if duracao_segundos is not None:
+        atual["duracao_segundos"] = round(duracao_segundos, 1)
+    if historico_tentativas is not None:
+        atual["historico_tentativas"] = historico_tentativas
+    if mensagem is not None:
+        atual["mensagem"] = mensagem
+    if mensagem_final is not None:
+        atual["mensagem_final"] = mensagem_final
+    if erro is not None:
+        atual["erro"] = erro
+
+    if idx >= 0:
+        fontes[idx] = atual
+    else:
+        fontes.append(atual)
+
+    status["fontes"] = fontes
+    if mensagem is not None:
+        status["mensagem"] = mensagem
+    status["atualizado_em"] = _agora_iso()
+    _salvar_status_execucao(status)
+
+
+def _max_tentativas_configuradas(max_tentativas: int | None) -> int:
+    if max_tentativas is not None:
+        return max(1, max_tentativas)
+
+    valor_env = os.getenv(STATUS_ENV_MAX_TENTATIVAS, "").strip()
+    if not valor_env:
+        return MAX_TENTATIVAS_PADRAO
+
+    try:
+        return max(1, int(valor_env))
+    except ValueError:
+        return MAX_TENTATIVAS_PADRAO
+
+
+def _executar_coletor_com_retry(
+    nome: str,
+    coletor: Callable[[], int],
+    max_tentativas: int,
+) -> dict:
+    inicio_fonte = time.time()
+    historico_tentativas: list[dict] = []
+
+    for tentativa in range(1, max_tentativas + 1):
+        inicio_tentativa = time.time()
+        mensagem_inicio = (
+            f"Iniciando coleta da base '{nome}' "
+            f"(tentativa {tentativa}/{max_tentativas})."
+        )
+        logger.info(mensagem_inicio)
+        _registrar_evento_status(
+            "tentativa_iniciada",
+            mensagem_inicio,
+            fonte=nome,
+            tentativa=tentativa,
+            max_tentativas=max_tentativas,
+        )
+        _atualizar_status_fonte(
+            fonte=nome,
+            status_fonte="EM_ANDAMENTO",
+            tentativa_atual=tentativa,
+            max_tentativas=max_tentativas,
+            mensagem=mensagem_inicio,
+        )
+
+        try:
+            total = coletor()
+            duracao_tentativa = time.time() - inicio_tentativa
+            historico_tentativas.append({
+                "tentativa": tentativa,
+                "status": "OK",
+                "duracao_segundos": round(duracao_tentativa, 1),
+                "timestamp": _agora_iso(),
+            })
+
+            duracao_total = time.time() - inicio_fonte
+            mensagem_final = (
+                f"Base '{nome}' atualizada com sucesso "
+                f"na tentativa {tentativa}/{max_tentativas}."
+            )
+            _registrar_evento_status(
+                "tentativa_sucesso",
+                mensagem_final,
+                fonte=nome,
+                tentativa=tentativa,
+                max_tentativas=max_tentativas,
+            )
+            _atualizar_status_fonte(
+                fonte=nome,
+                status_fonte="OK",
+                registros=total,
+                tentativa_atual=tentativa,
+                tentativas=tentativa,
+                max_tentativas=max_tentativas,
+                duracao_segundos=duracao_total,
+                historico_tentativas=historico_tentativas,
+                mensagem=mensagem_final,
+                mensagem_final=mensagem_final,
+            )
+
+            return {
+                "fonte": nome,
+                "registros": total,
+                "status": "OK",
+                "duracao_segundos": round(duracao_total, 1),
+                "tentativas": tentativa,
+                "max_tentativas": max_tentativas,
+                "historico_tentativas": historico_tentativas,
+                "mensagem_final": mensagem_final,
+            }
+        except Exception as e:
+            erro = str(e)
+            duracao_tentativa = time.time() - inicio_tentativa
+            historico_tentativas.append({
+                "tentativa": tentativa,
+                "status": "ERRO",
+                "erro": erro,
+                "duracao_segundos": round(duracao_tentativa, 1),
+                "timestamp": _agora_iso(),
+            })
+
+            mensagem_falha = (
+                f"Falha na base '{nome}' na tentativa "
+                f"{tentativa}/{max_tentativas}: {erro}"
+            )
+            logger.warning(mensagem_falha)
+            _registrar_evento_status(
+                "tentativa_falha",
+                mensagem_falha,
+                fonte=nome,
+                tentativa=tentativa,
+                max_tentativas=max_tentativas,
+                erro=erro,
+            )
+
+            if tentativa < max_tentativas:
+                espera = RETRY_BASE_SEGUNDOS * tentativa
+                mensagem_retry = (
+                    f"Falha ao obter dados da base '{nome}'. "
+                    f"Sistema tentando novamente em {espera}s "
+                    f"(próxima tentativa {tentativa + 1}/{max_tentativas})."
+                )
+                logger.warning(mensagem_retry)
+                _registrar_evento_status(
+                    "retry_agendado",
+                    mensagem_retry,
+                    fonte=nome,
+                    tentativa=tentativa,
+                    max_tentativas=max_tentativas,
+                    erro=erro,
+                    aguardar_segundos=espera,
+                )
+                _atualizar_status_fonte(
+                    fonte=nome,
+                    status_fonte="RETRYING",
+                    tentativa_atual=tentativa,
+                    tentativas=tentativa,
+                    max_tentativas=max_tentativas,
+                    historico_tentativas=historico_tentativas,
+                    mensagem=mensagem_retry,
+                    erro=erro,
+                )
+                time.sleep(espera)
+                continue
+
+            duracao_total = time.time() - inicio_fonte
+            mensagem_final = (
+                f"Base '{nome}' falhou definitivamente após "
+                f"{max_tentativas} tentativa(s)."
+            )
+            logger.error("%s Erro final: %s", mensagem_final, erro)
+            _registrar_evento_status(
+                "falha_definitiva",
+                f"{mensagem_final} Erro final: {erro}",
+                fonte=nome,
+                tentativa=tentativa,
+                max_tentativas=max_tentativas,
+                erro=erro,
+            )
+            _atualizar_status_fonte(
+                fonte=nome,
+                status_fonte=f"ERRO: {erro}",
+                registros=0,
+                tentativa_atual=tentativa,
+                tentativas=tentativa,
+                max_tentativas=max_tentativas,
+                duracao_segundos=duracao_total,
+                historico_tentativas=historico_tentativas,
+                mensagem=mensagem_final,
+                mensagem_final=mensagem_final,
+                erro=erro,
+            )
+
+            return {
+                "fonte": nome,
+                "registros": 0,
+                "status": f"ERRO: {erro}",
+                "duracao_segundos": round(duracao_total, 1),
+                "tentativas": tentativa,
+                "max_tentativas": max_tentativas,
+                "historico_tentativas": historico_tentativas,
+                "mensagem_final": mensagem_final,
+            }
 
 
 def salvar_json(dados, nome_arquivo):
