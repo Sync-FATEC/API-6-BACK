@@ -90,6 +90,11 @@ class AgendamentoCreate(BaseModel):
         ),
         json_schema_extra={"example": "2026-04-08"},
     )
+    etapa: str = Field(
+        default="full",
+        description="Etapa do pipeline a executar: 'extract', 'load', 'embed', 'validate' ou 'full'.",
+        json_schema_extra={"example": "full"},
+    )
 
     @model_validator(mode="after")
     def validar_intervalo_por_unidade(self) -> "AgendamentoCreate":
@@ -116,6 +121,7 @@ class AgendamentoUpdate(BaseModel):
     unidade: Optional[UnidadeRecorrencia] = Field(default=None, json_schema_extra={"example": "mes"})
     horario: Optional[time] = Field(default=None, json_schema_extra={"example": "03:00"})
     data_inicio: Optional[date] = Field(default=None, json_schema_extra={"example": "2026-04-08"})
+    etapa: Optional[str] = Field(default=None, json_schema_extra={"example": "full"})
     ativo: Optional[bool] = None
 
 
@@ -124,6 +130,7 @@ class AgendamentoResponse(BaseModel):
     intervalo: int
     unidade: str
     horario: str                      # "HH:MM" para fácil leitura
+    etapa: str                        # "extract" | "load" | "embed" | "validate" | "full"
     cron_expressao: str
     ativo: bool
     criado_em: datetime

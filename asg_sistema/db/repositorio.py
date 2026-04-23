@@ -408,8 +408,8 @@ def buscar_fontes() -> list[dict]:
 
 def atualizar_data_coleta_fontes(entidades: list[str], data_atualizacao: datetime):
     """
-    Atualiza a data_coleta e sincroniza o total_registros na tabela 'fontes'
-    baseado nas entidades que foram processadas no ETL.
+    Atualiza a data_coleta na tabela 'fontes' baseado nas entidades que foram processadas.
+    Se nenhuma entidade for encontrada ou lista estiver vazia, atualiza todas as fontes.
     """
     mapa_nomes = {
         "queimadas": "Queimadas (INPE)",
@@ -421,10 +421,19 @@ def atualizar_data_coleta_fontes(entidades: list[str], data_atualizacao: datetim
         "sicar": "SICAR SP"
     }
 
+    # Se lista vazia ou não especificada, atualiza tudo
+    if not entidades:
+        sql_data = "UPDATE fontes SET data_coleta = :dt"
+        executar_sql(sql_data, {"dt": data_atualizacao})
+        return
+
+    foi_atualizado_algo = False
+    
     for ent in entidades:
         if ent == "tudo":
             sql_data = "UPDATE fontes SET data_coleta = :dt"
             executar_sql(sql_data, {"dt": data_atualizacao})
+            foi_atualizado_algo = True
             continue
 
         nome_na_fonte = mapa_nomes.get(ent)
@@ -434,7 +443,13 @@ def atualizar_data_coleta_fontes(entidades: list[str], data_atualizacao: datetim
                 SET data_coleta = :dt 
                 WHERE nome ILIKE :nome
             """
-            executar_consulta(sql_update, {"dt": data_atualizacao, "nome": f"%{nome_na_fonte}%"})
+            executar_sql(sql_update, {"dt": data_atualizacao, "nome": f"%{nome_na_fonte}%"})
+            foi_atualizado_algo = True
+    
+    # Se nenhuma entidade foi encontrada no mapa (entidade desconhecida), atualiza tudo como fallback
+    if not foi_atualizado_algo:
+        sql_data = "UPDATE fontes SET data_coleta = :dt"
+        executar_sql(sql_data, {"dt": data_atualizacao})
 
 def obter_resumo_fontes() -> dict:
     """

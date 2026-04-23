@@ -59,6 +59,7 @@ def criar_agendamento(
         intervalo=payload.intervalo,
         unidade=payload.unidade,
         horario=payload.horario.strftime("%H:%M"),
+        etapa=payload.etapa,
         cron_expressao=payload.cron_expressao,
     )
     db.add(agendamento)

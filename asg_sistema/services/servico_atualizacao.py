@@ -33,12 +33,12 @@ def _atualizar_status_agendamento(
     setattr(agendamento, "ultima_mensagem", ultima_mensagem)
 
 
-async def _disparar_etl() -> dict:
+async def _disparar_etl(etapa: str = "full") -> dict:
     """Dispara uma única tentativa de POST /api/etl/executar."""
     async with httpx.AsyncClient(timeout=3600) as client:
         response = await client.post(
             API_URL_ETL_EXECUTAR,
-            params={"skip_sicar": True},
+            params={"skip_sicar": True, "etapa": etapa},
         )
         response.raise_for_status()
         return response.json()
@@ -76,14 +76,15 @@ async def executar_atualizacao_completa(agendamento_id: int, tentativa_atual: in
         db.commit()
 
         logger.info(
-            "=== Agendamento id=%d iniciado (tentativa %d/%d) ===",
+            "=== Agendamento id=%d iniciado (tentativa %d/%d, etapa=%s) ===",
             agendamento_id,
             tentativa_atual,
             max_tentativas_retry,
+            agendamento.etapa,
         )
 
-        # Dispara POST /api/etl/executar (uma tentativa por execução).
-        resultado = await _disparar_etl()
+        # Dispara POST /api/etl/executar com a etapa do agendamento
+        resultado = await _disparar_etl(etapa=agendamento.etapa)
         logger.info("[ETL] Resposta da API: %s", resultado)
 
         # Se chegou aqui, sucesso!
