@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from asg_sistema.api.esquemas import ConsultaRequest, ConsultaResponse
+from asg_sistema.api.rotas_pipeline import pipeline_status
 
 router = APIRouter()
 
@@ -55,6 +56,14 @@ def obter_interpretador():
 @router.post("/consulta")
 def consultar(req: ConsultaRequest):
     import json
+
+    if pipeline_status["rodando"]:
+        return JSONResponse(
+            status_code=503,
+            content={},
+            media_type="application/json; charset=utf-8",
+        )
+
     try:
         interpretador = obter_interpretador()
         resposta = interpretador.processar(req.pergunta, cod_imovel=req.cod_imovel)
