@@ -397,15 +397,7 @@ setx PATH "$env:PATH;C:\Program Files\Tesseract-OCR"
 cp .env.example .env
 ```
 
-Edite `.env` com as credenciais do banco se necessário (os valores padrão funcionam com o Docker Compose incluso):
-
-```env
-ASG_DB_HOST=localhost
-ASG_DB_PORT=5433
-ASG_DB_NOME=asg_sp
-ASG_DB_USUARIO=asg_user
-ASG_DB_SENHA=asg_pass
-```
+Edite `.env` com as credenciais do banco
 
 ### 2. Instalar Dependências
 
@@ -414,7 +406,7 @@ python -m venv .venv
 # Windows:
 .venv\Scripts\activate
 # Linux/macOS:
-source .venv/bin/activate
+source venv/bin/activate
 
 pip install -r requirements.txt
 python -m spacy download pt_core_news_sm
@@ -437,7 +429,7 @@ python scripts/criar_banco.py
 ### 5. Baixar Dados do SICAR
 
 ```bash
-python scripts/sicar/coletar_sicar.py
+python scripts/coletar_sicar.py
 ```
 
 ### 6. Executar o Pipeline ETL
