@@ -13,12 +13,19 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from asg_sistema.api.etl_cooldown import (
-    assegurar_cooldown_disparo_etl_api, 
+    assegurar_cooldown_disparo_etl_api,
     registrar_disparo_etl_api
 )
 from asg_sistema.db import repositorio
 
 router = APIRouter()
+
+pipeline_status = {
+    "rodando": False,
+    "inicio_execucao": 0.0,
+    "etapa": None,
+    "entidades": [],
+}
 
 class EntidadeETL(str, Enum):
     tudo = "tudo"
@@ -35,18 +42,6 @@ class EtapaETL(str, Enum):
     embed = "embed"
     validate = "validate"
     full = "full"
-    
-pipeline_status = {
-    "rodando": False,
-    "inicio_execucao": 0.0
-}
-
-pipeline_status = {
-    "rodando": False,
-    "inicio_execucao": 0.0,
-    "etapa": None,
-    "entidades": []
-}
 
 current_process = None
 
