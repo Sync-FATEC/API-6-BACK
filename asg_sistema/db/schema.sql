@@ -150,6 +150,27 @@ CREATE INDEX IF NOT EXISTS idx_sicar_municipio ON sicar_imoveis(municipio);
 CREATE INDEX IF NOT EXISTS idx_sicar_cod_imovel ON sicar_imoveis(cod_imovel);
 CREATE INDEX IF NOT EXISTS idx_sicar_status ON sicar_imoveis(ind_status);
 
+-- Agendamentos de Atualização (ASG)
+CREATE TABLE IF NOT EXISTS agendamentos_atualizacao (
+    id                  SERIAL PRIMARY KEY,
+
+    -- Recorrência em linguagem simples
+    intervalo           INTEGER NOT NULL,               -- ex: 1, 2, 3
+    unidade             VARCHAR(10) NOT NULL,           -- 'hora' | 'dia' | 'semana' | 'mes'
+    horario             VARCHAR(5) NOT NULL DEFAULT '02:00',  -- 'HH:MM'
+    etapa               VARCHAR(20) NOT NULL DEFAULT 'full',  -- 'extract' | 'load' | 'embed' | 'validate' | 'full'
+
+    -- Expressão cron derivada automaticamente
+    cron_expressao      VARCHAR(100) NOT NULL,
+
+    ativo               BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em           TIMESTAMP DEFAULT NOW(),
+    atualizado_em       TIMESTAMP DEFAULT NOW(),
+    ultima_execucao_em  TIMESTAMP,
+    ultimo_status       VARCHAR(20),                    -- 'sucesso' | 'erro' | 'executando'
+    ultima_mensagem     TEXT
+);
+
 CREATE TABLE IF NOT EXISTS corpus_asg (
     id SERIAL PRIMARY KEY,
     fonte VARCHAR(100) NOT NULL,

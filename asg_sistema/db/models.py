@@ -21,6 +21,7 @@ class AgendamentoAtualizacao(Base):
     intervalo        = Column(Integer, nullable=False)          # ex: 1, 2, 3…
     unidade          = Column(String(10), nullable=False)       # "hora" | "dia" | "semana" | "mes"
     horario          = Column(String(5), nullable=False, default="02:00")  # "HH:MM"
+    etapa            = Column(String(20), nullable=False, default="full")  # "extract" | "load" | "embed" | "validate" | "full"
 
     # Expressão cron derivada (gerada automaticamente a partir dos 3 campos acima)
     cron_expressao   = Column(String(100), nullable=False)
