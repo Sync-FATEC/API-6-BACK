@@ -17,14 +17,14 @@
   ],
   "total_geral": 71,
   "arquivos_gerados": [
-    "sicar_imoveis_sp.json",
+    "deter_amazonia_sp.json",
     "deter_desmatamento_sp.json",
-    "unidades_conservacao_sp.json",
-    "resumo_coleta.json",
-    "queimadas_focos_sp.json",
     "funai_terras_indigenas_sp.json",
-    "prodes_desmatamento_sp.json",
     "palmares_quilombolas_sp.json",
-    "deter_amazonia_sp.json"
+    "prodes_desmatamento_sp.json",
+    "queimadas_focos_sp.json",
+    "resumo_coleta.json",
+    "sicar_imoveis_sp.json",
+    "unidades_conservacao_sp.json"
   ]
 }
