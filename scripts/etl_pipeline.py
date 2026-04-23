@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Pipeline ETL completo para o Sistema ASG-SP.
 
@@ -49,13 +50,47 @@ logger = logging.getLogger("etl_pipeline")
 class RegistroETL:
     """Registra cada execucao do pipeline para rastreabilidade."""
 
-    def __init__(self, execution_id: str | None = None):
+    def __init__(self, etapa_solicitada: str = "full", entidades_solicitadas: list = None, execution_id: str | None = None):
         self.execution_id = execution_id or uuid.uuid4().hex
         self.inicio = datetime.now()
         self.etapas = []
         self.erros = []
+        self.etapa_solicitada = etapa_solicitada
+        self.entidades_solicitadas = entidades_solicitadas or ["tudo"]
         self.status_path = LOG_DIR / f"status_etl_{self.execution_id}.json"
         self._inicializar_status()
+    def _proximo_id_execucao(self, historico_path: Path) -> int:
+        """Gera identificador incremental de execução para exibição no histórico."""
+        if not historico_path.exists():
+            return 1
+    
+        ultimo_id = 0
+        with open(historico_path, "r", encoding="utf-8") as f:
+            for linha in f:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    reg = json.loads(linha)
+                except json.JSONDecodeError:
+                    continue
+    
+                valor = reg.get("execucao_id")
+                if isinstance(valor, int):
+                    ultimo_id = max(ultimo_id, valor)
+                    continue
+    
+                pipeline_nome = str(reg.get("pipeline", ""))
+                if pipeline_nome.startswith("ETL ASG-SP #"):
+                    try:
+                        numero = int(pipeline_nome.rsplit("#", 1)[-1].strip())
+                        ultimo_id = max(ultimo_id, numero)
+                    except ValueError:
+                        pass
+    
+        return ultimo_id + 1
+    
+    
 
     def _status_base(self) -> dict:
         return {
@@ -190,7 +225,11 @@ class RegistroETL:
         )
 
     def registrar_erro(self, etapa: str, erro: str):
-        self.erros.append({"etapa": etapa, "erro": erro, "timestamp": datetime.now().isoformat()})
+        self.erros.append({
+            "etapa": etapa, 
+            "erro": erro, 
+            "timestamp": datetime.now().isoformat()
+        })
         self.registrar_evento("erro", f"Erro na etapa '{etapa}': {erro}", etapa=etapa)
         self.atualizar_status(
             mensagem=f"Erro detectado na etapa '{etapa}'.",
@@ -206,12 +245,17 @@ class RegistroETL:
         eventos = status_atual.get("eventos") if isinstance(status_atual.get("eventos"), list) else []
         sucesso = len(self.erros) == 0
 
+        historico_path = LOG_DIR / "historico_etl.jsonl"
+        execucao_id = self._proximo_id_execucao(historico_path)
         registro = {
             "execution_id": self.execution_id,
-            "pipeline": "ETL ASG-SP",
+            "pipeline": f"ETL ASG-SP #{execucao_id}",
+            "execucao_id": execucao_id,
             "inicio": self.inicio.isoformat(),
             "fim": fim.isoformat(),
             "duracao_total_segundos": duracao_total,
+            "etapa_solicitada": self.etapa_solicitada,
+            "entidades": self.entidades_solicitadas,
             "etapas": self.etapas,
             "erros": self.erros,
             "fontes": fontes,
@@ -219,7 +263,6 @@ class RegistroETL:
             "status_arquivo": str(self.status_path),
             "sucesso": sucesso,
         }
-        historico_path = LOG_DIR / "historico_etl.jsonl"
         with open(historico_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(registro, ensure_ascii=False) + "\n")
 
@@ -292,11 +335,10 @@ def _carregar_fontes_resumo_coleta() -> list[dict]:
 
     return fontes
 
-
-def etapa_extract(registro: RegistroETL) -> bool:
+def etapa_extract(registro: RegistroETL, entidades: list) -> bool:
     """EXTRACT: Coleta dados de todas as fontes publicas."""
     logger.info("=" * 60)
-    logger.info("ETAPA 1/4: EXTRACT - Coletando dados das APIs publicas")
+    logger.info(f"ETAPA 1/4: EXTRACT - Coletando dados (Entidades: {entidades})")
     logger.info("=" * 60)
     inicio = time.time()
 
@@ -318,8 +360,11 @@ def etapa_extract(registro: RegistroETL) -> bool:
         env["ETL_EXECUTION_ID"] = registro.execution_id
         env.setdefault("ETL_MAX_TENTATIVAS", "3")
 
+        
+        cmd = [sys.executable, str(coletor_path), "--entidades"] + entidades
+        
         resultado = subprocess.run(
-            [sys.executable, str(coletor_path)],
+            cmd,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -392,10 +437,10 @@ def etapa_extract(registro: RegistroETL) -> bool:
         return False
 
 
-def etapa_transform_load(registro: RegistroETL) -> bool:
+def etapa_transform_load(registro: RegistroETL, entidades: list) -> bool:
     """TRANSFORM + LOAD: Textualiza e carrega no PostgreSQL."""
     logger.info("=" * 60)
-    logger.info("ETAPA 2/4: TRANSFORM + LOAD - Textualizando e carregando no banco")
+    logger.info("ETAPA 2/4: TRANSFORM + LOAD - Aplicando UPSERT (inserção e atualização) no banco")
     logger.info("=" * 60)
     inicio = time.time()
 
@@ -412,19 +457,15 @@ def etapa_transform_load(registro: RegistroETL) -> bool:
 
     try:
         from asg_sistema.config import config
-        from asg_sistema.db.conexao import executar_sql, executar_consulta
-
-        logger.info("Limpando tabelas existentes...")
-        for tabela in ["corpus_asg", "queimadas", "desmatamento_alertas", "unidades_conservacao", "terras_indigenas", "prodes_desmatamento", "comunidades_quilombolas", "sicar_imoveis", "fontes"]:            
-            executar_sql(f"DELETE FROM {tabela}")
-        logger.info("Tabelas limpas.")
-
+        from asg_sistema.db.conexao import executar_consulta
         from asg_sistema.ingestao.carregador import carregar_tudo
-        carregar_tudo(config.caminho_dados)
+
+        logger.info("Atualizando tabelas com registros recentes...")
+        
+        carregar_tudo(config.caminho_dados, entidades)
 
         contagens = {}
-        for tabela in ["queimadas", "terras_indigenas", "desmatamento_alertas", "unidades_conservacao", "prodes_desmatamento", "comunidades_quilombolas", "sicar_imoveis", "corpus_asg"]:            
-            r = executar_consulta(f"SELECT COUNT(*) as total FROM {tabela}")
+        for tabela in ["queimadas", "terras_indigenas", "desmatamento_alertas", "unidades_conservacao", "prodes_desmatamento", "comunidades_quilombolas", "sicar_imoveis", "corpus_asg"]:
             contagens[tabela] = r[0]["total"]
             logger.info("  %s: %d registros", tabela, contagens[tabela])
 
@@ -651,13 +692,13 @@ def etapa_validacao(registro: RegistroETL) -> bool:
         return False
 
 
-def pipeline_completo(execution_id: str | None = None):
+def pipeline_completo(etapa: str, entidades: list, execution_id: str | None = None):
     """Executa o pipeline ETL completo."""
     logger.info("=" * 60)
     logger.info("PIPELINE ETL ASG-SP - Inicio: %s", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     logger.info("=" * 60)
 
-    registro = RegistroETL(execution_id=execution_id)
+    registro = RegistroETL(etapa_solicitada=etapa, entidades_solicitadas=entidades, execution_id=execution_id)
     registro.atualizar_status(
         mensagem="Pipeline iniciado. Preparando etapas.",
         etapa_atual="inicio",
@@ -669,7 +710,7 @@ def pipeline_completo(execution_id: str | None = None):
         "Pipeline ETL iniciado.",
     )
 
-    ok_extract = etapa_extract(registro)
+    ok_extract = etapa_extract(registro, entidades)
     if not ok_extract:
         logger.warning("Extract falhou, tentando carregar dados existentes...")
         registro.registrar_evento(
@@ -678,7 +719,7 @@ def pipeline_completo(execution_id: str | None = None):
             etapa="extract",
         )
 
-    ok_load = etapa_transform_load(registro)
+    ok_load = etapa_transform_load(registro, entidades)
     if not ok_load:
         logger.error("Transform+Load falhou. Abortando pipeline.")
         registro.registrar_evento(
@@ -713,7 +754,7 @@ def agendar(intervalo_horas: int):
     """Roda o pipeline em loop com intervalo definido."""
     logger.info("Pipeline agendado a cada %d horas. Ctrl+C para parar.", intervalo_horas)
     while True:
-        pipeline_completo()
+        pipeline_completo(etapa="full", entidades=["tudo"])
         logger.info("Proxima execucao em %d horas...", intervalo_horas)
         time.sleep(intervalo_horas * 3600)
 
@@ -722,6 +763,7 @@ def main():
     parser = argparse.ArgumentParser(description="Pipeline ETL do Sistema ASG-SP")
     parser.add_argument("--etapa", choices=["extract", "load", "embed", "validate", "full"], default="full",
                         help="Etapa a executar (default: full)")
+    parser.add_argument("--entidades", nargs="+", default=["tudo"], help="Entidades para processar")
     parser.add_argument("--agendar", type=int, metavar="HORAS",
                         help="Roda em loop a cada N horas")
     parser.add_argument(
@@ -730,6 +772,7 @@ def main():
         default=None,
         help="Identificador da execucao para rastreamento de status.",
     )
+    
     args = parser.parse_args()
 
     if args.agendar:
@@ -737,18 +780,19 @@ def main():
         return
 
     if args.etapa == "full":
-        pipeline_completo(execution_id=args.execution_id)
+        pipeline_completo(args.etapa, args.entidades, execution_id=args.execution_id)
         return
 
-    registro = RegistroETL(execution_id=args.execution_id)
+    registro = RegistroETL(etapa_solicitada=args.etapa, entidades_solicitadas=args.entidades, execution_id=args.execution_id)
     if args.etapa == "extract":
-        etapa_extract(registro)
+        etapa_extract(registro, args.entidades)
     elif args.etapa == "load":
-        etapa_transform_load(registro)
+        etapa_transform_load(registro, args.entidades)
     elif args.etapa == "embed":
         etapa_vetorizacao(registro)
     elif args.etapa == "validate":
         etapa_validacao(registro)
+    
     registro.salvar()
 
 

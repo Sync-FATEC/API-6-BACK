@@ -12,6 +12,7 @@ Fontes:
 - Palmares: Comunidades Quilombolas (CSV/dados abertos)
 """
 
+import argparse
 import json
 import os
 import argparse
@@ -1025,26 +1026,44 @@ def gerar_resumo(resultados):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--entidades", nargs="+", default=["tudo"])
+    args = parser.parse_args()
+
     logger.info("=" * 60)
-    logger.info("COLETOR ASG - Estado de São Paulo")
+    logger.info(f"COLETOR ASG - Iniciando com entidades: {args.entidades}")
     logger.info("=" * 60)
 
     BASE_DIR.mkdir(parents=True, exist_ok=True)
 
-    coletores = [
-        ("FUNAI - Terras Indígenas", coletar_funai),
-        ("INPE/DETER - Desmatamento Cerrado", coletar_deter),
-        ("INPE/DETER - Desmatamento Amazônia", coletar_deter_amazonia),
-        ("INPE/Queimadas - Focos de Incêndio", coletar_queimadas),
-        ("INPE/PRODES - Desmatamento Anual", coletar_prodes),
-        ("MMA/ICMBio - Unidades de Conservação", coletar_unidades_conservacao),
-        ("SICAR - Cadastro Ambiental Rural", coletar_sicar),
-        ("Palmares - Comunidades Quilombolas", coletar_quilombolas),
-    ]
+    todos_coletores = {
+        "terras_indigenas": [("FUNAI - Terras Indígenas", coletar_funai)],
+        "desmatamentos": [
+            ("INPE/DETER - Desmatamento Cerrado", coletar_deter),
+            ("INPE/DETER - Desmatamento Amazônia", coletar_deter_amazonia),
+            ("INPE/PRODES - Desmatamento Anual", coletar_prodes)
+        ],
+        "queimadas": [("INPE/Queimadas - Focos de Incêndio", coletar_queimadas)],
+        "unidades_conservacao": [("MMA/ICMBio - Unidades de Conservação", coletar_unidades_conservacao)],
+        "sicar": [("SICAR - Cadastro Ambiental Rural", coletar_sicar)],
+        "quilombos": [("Palmares - Comunidades Quilombolas", coletar_quilombolas)],
+    }
+
+    coletores_executar = []
+    
+    if "tudo" in args.entidades:
+        for coletores in todos_coletores.values():
+            coletores_executar.extend(coletores)
+    else:
+        for entidade in args.entidades:
+            if entidade in todos_coletores:
+                coletores_executar.extend(todos_coletores[entidade])
+            else:
+                logger.warning("Entidade desconhecida ignorada: %s", entidade)
 
     resultados = []
 
-    for nome, coletor in coletores:
+    for nome, coletor in coletores_executar:
         logger.info("-" * 40)
         logger.info("Iniciando: %s", nome)
         inicio = time.time()
@@ -1056,8 +1075,8 @@ def main():
         except Exception as e:
             total = 0
             duracao = time.time() - inicio
-            status = f"ERRO: {e}"
-            logger.error("%s falhou: %s", nome, e)
+            status = f"FALHA (PULADO): {e}"
+            logger.error("%s falhou ao baixar e será ignorado nesta rodada: %s", nome, e)
 
         resultados.append({
             "fonte": nome,

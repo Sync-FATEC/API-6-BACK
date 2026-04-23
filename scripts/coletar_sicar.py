@@ -15,38 +15,43 @@ e será lido automaticamente pelo ingerir_dados.py.
 import json
 import struct
 import zipfile
+import time
 from pathlib import Path
 
 from SICAR import Sicar, State, Polygon
 from SICAR.drivers import Tesseract
 
-
-PASTA_DADOS = Path(__file__).parent.parent.parent / "dados"
+PASTA_DADOS = Path(__file__).parent.parent / "dados"
 PASTA_GEOJSON = PASTA_DADOS / "geojson"
 
-
-# ---------------------------------------------------------------------------
-# Download
-# ---------------------------------------------------------------------------
-
-def baixar_sicar() -> Path:
+def baixar_sicar(max_tentativas: int = 5) -> Path:
     zip_destino = PASTA_DADOS / "SP_AREA_IMOVEL.zip"
     PASTA_DADOS.mkdir(parents=True, exist_ok=True)
+    
     print("Inicializando conexão com o SICAR...")
     car = Sicar(driver=Tesseract)
 
-    datas = car.get_release_dates()
-    print(f"Última atualização de SP: {datas.get(State.SP)}")
+    try:
+        datas = car.get_release_dates()
+        print(f"Última atualização de SP: {datas.get(State.SP)}")
+    except Exception as e:
+        print(f"[AVISO] Não foi possível pegar a data de atualização: {e}")
 
-    print("\nBaixando SP_AREA_IMOVEL...")
-    car.download_state(state=State.SP, polygon=Polygon.AREA_PROPERTY, folder=str(PASTA_DADOS))
-    print(f"  -> Download concluído: {zip_destino}")
-    return zip_destino
-
-
-# ---------------------------------------------------------------------------
-# Parser DBF
-# ---------------------------------------------------------------------------
+    for tentativa in range(1, max_tentativas + 1):
+        print(f"\nBaixando SP_AREA_IMOVEL... (Tentativa {tentativa}/{max_tentativas})")
+        try:
+            car.download_state(state=State.SP, polygon=Polygon.AREA_PROPERTY, folder=str(PASTA_DADOS))
+            print(f"  -> Download concluído com sucesso: {zip_destino}")
+            return zip_destino
+            
+        except Exception as e:
+            print(f"[ERRO] Falha na tentativa {tentativa}: {e}")
+            if tentativa == max_tentativas:
+                print("[ERRO FATAL] O servidor do SICAR está muito instável hoje. Desistindo após 5 tentativas.")
+                raise e
+                
+            print("O servidor deu timeout. Aguardando 15 segundos antes de tentar de novo...")
+            time.sleep(15)
 
 def ler_dbf(data: bytes) -> list[dict]:
     num_records = struct.unpack_from("<I", data, 4)[0]
@@ -81,11 +86,6 @@ def ler_dbf(data: bytes) -> list[dict]:
         offset += record_size
 
     return records
-
-
-# ---------------------------------------------------------------------------
-# Parser SHP
-# ---------------------------------------------------------------------------
 
 def ler_geometria_polygon(data: bytes, offset: int) -> dict:
     num_parts  = struct.unpack_from("<i", data, offset + 36)[0]
@@ -123,11 +123,6 @@ def ler_shp(data: bytes) -> list[dict | None]:
         offset += 8 + content_length
 
     return geometrias
-
-
-# ---------------------------------------------------------------------------
-# Conversão ZIP → GeoJSON
-# ---------------------------------------------------------------------------
 
 def converter_para_geojson(caminho_zip: Path) -> Path:
     nome = caminho_zip.stem
@@ -167,11 +162,6 @@ def converter_para_geojson(caminho_zip: Path) -> Path:
     tamanho_mb = destino.stat().st_size / (1024 * 1024)
     print(f"Salvo: {destino.name} ({tamanho_mb:.1f} MB, {total:,} features)")
     return destino
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     caminho_zip = baixar_sicar()

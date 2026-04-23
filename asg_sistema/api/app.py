@@ -1,7 +1,10 @@
 """FastAPI application factory."""
 
 import json
+import asyncio
+import glob
 import logging
+import os
 import subprocess
 import sys
 import uuid
@@ -10,13 +13,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_geo
+from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_geo, rotas_pipeline
 from asg_sistema.db.conexao import SessionLocal, engine
 from asg_sistema.db.models import AgendamentoAtualizacao, Base
 from asg_sistema.routers.agendamento_router import router as agendamento_router
@@ -29,6 +32,10 @@ from asg_sistema.scheduler.gerenciador import (
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 logger = logging.getLogger("uvicorn.error")
+
+pipeline_status = {
+    "rodando": False
+}
 
 
 @asynccontextmanager
@@ -74,6 +81,7 @@ app.include_router(rotas_consulta.router, prefix="/api", tags=["Consulta"])
 app.include_router(rotas_banco.router, prefix="/api", tags=["Banco de dados"])
 app.include_router(rotas_dados.router, prefix="/api/dados", tags=["Dados"])
 app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
+app.include_router(rotas_pipeline.router, prefix="/api/etl", tags=["Pipeline ETL"])
 app.include_router(agendamento_router, prefix="/api/v1")
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "static")), name="static")

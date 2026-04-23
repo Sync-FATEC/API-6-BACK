@@ -26,5 +26,6 @@ class BuscadorSemantico:
             data_inicio=periodo.get("inicio"),
             data_fim=periodo.get("fim"),
             limite=top_k,
+            cod_imovel=filtros.get("cod_imovel"),
         )
         return resultados

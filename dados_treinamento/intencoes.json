@@ -219,5 +219,10 @@
   {"texto": "Imóveis rurais em Adamantina cadastrados no SICAR", "intencao": "consultar_imovel_rural"},
   {"texto": "Módulos fiscais de imóveis rurais no SICAR paulista", "intencao": "consultar_imovel_rural"},
   {"texto": "Propriedades rurais com CAR cancelado em SP", "intencao": "consultar_imovel_rural"},
-  {"texto": "Imóveis rurais ativos no CAR em Araraquara", "intencao": "consultar_imovel_rural"}
+  {"texto": "Imóveis rurais ativos no CAR em Araraquara", "intencao": "consultar_imovel_rural"},
+  {"texto": "Quantas fazendas ativas em Limeira?", "intencao": "consultar_imovel_rural"},
+  {"texto": "Situação das fazendas no CAR em Ituverava", "intencao": "consultar_imovel_rural"},
+  {"texto": "Listar fazendas cadastradas em Catanduva", "intencao": "consultar_imovel_rural"},
+  {"texto": "Fazenda com CAR pendente em Ourinhos", "intencao": "consultar_imovel_rural"},
+  {"texto": "Chácaras e sítios registrados no SICAR em Jundiaí", "intencao": "consultar_imovel_rural"}
 ]

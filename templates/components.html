@@ -1,0 +1,84 @@
+{% macro barra_metrica(nome, valor, distancia, is_last=false) %}
+    {% set percentual = (valor / 20) * 100 %}
+    
+    {% if valor <= 4 %}
+        {% set cor_bg = 'bg-asg-great' %}
+        {% set cor_texto = 'text-asg-great' %}
+    {% elif valor <= 8 %}
+        {% set cor_bg = 'bg-asg-good' %}
+        {% set cor_texto = 'text-asg-good' %}
+    {% elif valor <= 12 %}
+        {% set cor_bg = 'bg-asg-okay' %}
+        {% set cor_texto = 'text-asg-okay' %}
+    {% elif valor <= 16 %}
+        {% set cor_bg = 'bg-asg-bad' %}
+        {% set cor_texto = 'text-asg-bad' %}
+    {% else %}
+        {% set cor_bg = 'bg-asg-terrible' %}
+        {% set cor_texto = 'text-asg-terrible' %}
+    {% endif %}
+
+    <div class="{{ 'mb-0' if is_last else 'mb-11' }} w-full">
+        <div class="flex justify-between items-end mb-1">
+            <span class="text-sm font-bold text-slate-500 uppercase">{{ nome }}</span>
+            <span class="text-sm font-bold text-slate-400">{{ distancia }}</span>
+        </div>
+
+        <div class="w-full bg-slate-100 h-3 flex">
+            <div class="{{ cor_bg }} h-full" style="width: {{ percentual }}%;"></div>
+        </div>
+
+        <div class="relative w-full mt-1 text-sm font-bold">
+            
+            {% if valor == 0 or valor > 2 %}
+                <span class="absolute left-0 {% if valor == 0 %}{{ cor_texto }}{% else %}text-slate-600{% endif %}">
+                    0
+                </span>
+            {% endif %}
+
+            {% if valor > 0 and valor < 20 %}
+                <span class="absolute {{ cor_texto }}" 
+                      style="left: {{ percentual }}%; transform: translateX(-50%);">
+                    {{ "%02d" | format(valor) }}
+                </span>
+            {% endif %}
+
+            {% if valor == 20 or valor < 18 %}
+                <span class="absolute right-0 {% if valor == 20 %}{{ cor_texto }}{% else %}text-slate-600{% endif %}">
+                    20
+                </span>
+            {% endif %}
+            
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro nota_final(valor) %}
+    {% if valor <= 20 %}
+        {% set cor_texto = 'text-asg-great' %}
+        {% set cor_barra = 'bg-asg-great' %}
+    {% elif valor <= 40 %}
+        {% set cor_texto = 'text-asg-good' %}
+        {% set cor_barra = 'bg-asg-good' %}
+    {% elif valor <= 60 %}
+        {% set cor_texto = 'text-asg-okay' %}
+        {% set cor_barra = 'bg-asg-okay' %}
+    {% elif valor <= 80 %}
+        {% set cor_texto = 'text-asg-bad' %}
+        {% set cor_barra = 'bg-asg-bad' %}
+    {% else %}
+        {% set cor_texto = 'text-asg-terrible' %}
+        {% set cor_barra = 'bg-asg-terrible' %}
+    {% endif %}
+
+    <div class="flex flex-col mb-8">
+        <div class="flex items-end">
+            <span class="text-6xl font-bold leading-none {{ cor_texto }}">
+                {{ valor }}
+            </span>
+            
+            <span class="text-2xl font-semibold ml-1 mb-1 text-slate-400">
+                / 100
+            </span>
+        </div>
+{% endmacro %}

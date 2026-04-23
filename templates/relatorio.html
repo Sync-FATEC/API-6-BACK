@@ -1,0 +1,132 @@
+{% from 'components.html' import barra_metrica, nota_final %}
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Relatório ASG</title>
+
+    <style>
+      @page {
+        size: A4;
+        margin: 0.5cm;
+        margin-bottom: 1.5cm;
+
+        @bottom-left {
+          content: "VISIONA GeoQuery © 2026. Todos os direitos reservados.";
+          font-size: 10px;
+          color: #94a3b8;
+          margin-left: 8px;
+        }
+      }
+      
+    </style>
+  </head>
+  <body class="bg-white text-slate-800 font-sans">
+    <header class="flex justify-between items-center mb-2.5">
+      <div>
+        <img src="{{ logo_url }}" alt="Logo Visiona" class="h-10" />
+      </div>
+      <div class="text-right flex flex-col justify-end w-75">
+        <h1 class="text-orange-500 font-bold text-lg leading-none mb-0">
+          RELATÓRIO ASG
+        </h1>
+        <p class="text-sm text-slate-500 leading-none uppercase text-nowrap">
+          DATA: {{ data_relatorio }}
+        </p>
+      </div>
+    </header>
+
+    <img src="{{ header_deco_url }}" class="mt-2 mb-5 h-5" />
+
+    <main class="grid grid-cols-2 gap-6">
+      <section class="border-[0.5px] border-solid border-slate-200">
+        <h2 class="text-orange-500 font-bold text-sm mt-5 ml-3 mb-0">
+          CÓDIGO IMÓVEL RURAL
+        </h2>
+        <p class="text-sm text-slate-600 truncate ml-3 mb-5">
+          {{ codigo_imovel }}
+        </p>
+        <div class="bg-slate-950 h-116 w-full flex items-center justify-center">
+          {% if mapa_url %}
+          <img src="{{ mapa_url }}" class="w-full h-full object-contain" />
+          {% else %}
+          <span class="text-white text-sm">Erro ao carregar mapa</span>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="border-[0.5px] border-solid border-slate-200 p-3 pb-0">
+        <h2 class="text-orange-500 font-bold text-sm">ÍNDICE DE RISCO</h2>
+
+        {{ nota_final(indice_risco) }}
+
+        <div
+          class="border-t border-slate-200 mt-6 pt-4 -ml-3 w-[calc(100%+1.5rem)]"
+        ></div>
+
+        {% for risco in lista_riscos %} {{ barra_metrica( nome=risco.nome,
+        valor=risco.valor, distancia=risco.distancia, is_last=loop.last ) }} {%
+        endfor %}
+      </section>
+      <section
+        class="border-[0.5px] border-solid border-slate-200 info-padding col-span-2"
+      >
+        <h2 class="text-orange-500 font-bold text-sm mb-3 uppercase">
+          Outras Informações
+        </h2>
+
+        <div class="flex flex-col">
+          <div class="flex justify-between items-center mb-2.5">
+            <span class="text-slate-700 font-bold text-sm uppercase"
+              >Município</span
+            >
+            <span class="text-slate-500 text-sm uppercase"
+              >{{ municipio }}</span
+            >
+          </div>
+          <div class="flex justify-between items-center mb-2.5">
+            <span class="text-slate-700 font-bold text-sm uppercase"
+              >Categoria</span
+            >
+            <span class="text-slate-500 text-sm uppercase"
+              >{{ categoria }}</span
+            >
+          </div>
+          <div class="flex justify-between items-center mb-2.5">
+            <span class="text-slate-700 font-bold text-sm uppercase"
+              >Status</span
+            >
+            <span class="text-slate-500 text-sm uppercase">{{ status }}</span>
+          </div>
+          <div class="flex justify-between items-center mb-2.5">
+            <span class="text-slate-700 font-bold text-sm uppercase"
+              >Condição</span
+            >
+            <span class="text-slate-500 text-sm uppercase">{{ condicao }}</span>
+          </div>
+          <div class="flex justify-between items-center mb-2.5">
+            <span class="text-slate-700 font-bold text-sm uppercase">Área</span>
+            <span class="text-slate-500 text-sm uppercase">{{ area }}</span>
+          </div>
+          <div class="flex justify-between items-center mb-2.5">
+            <span class="text-slate-700 font-bold text-sm uppercase"
+              >Mód. Fiscais</span
+            >
+            <span class="text-slate-500 text-sm uppercase"
+              >{{ mod_fiscais }}</span
+            >
+          </div>
+          <div class="flex justify-between items-center mb-2.5">
+            <span class="text-slate-700 font-bold text-sm uppercase"
+              >Fonte</span
+            >
+            <span class="text-slate-500 text-sm uppercase"
+              >{{ fonte }} | {{ data_fonte }}</span
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
