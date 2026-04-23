@@ -12,6 +12,16 @@ class ConsultaRequest(BaseModel):
     )
 
 
+class GrupoResposta(BaseModel):
+    rotulo: str
+    filtros: dict
+    resumo: str
+    estatisticas: dict
+    total_resultados: int
+    nota_risco: dict | None = None
+    fontes: list[dict] = []
+
+
 class ConsultaResponse(BaseModel):
     pergunta: str
     intencao_detectada: str
@@ -25,3 +35,8 @@ class ConsultaResponse(BaseModel):
     total_resultados: int
     tempo_processamento_ms: float
     preprocessamento: dict | None = None
+    nota_risco: dict | None = None
+    exportacao_relatorio: dict | None = None
+    grupos: list[GrupoResposta] | None = None
+    eixo_agrupamento: str | None = None
+    intencoes_detectadas: list[dict] | None = None

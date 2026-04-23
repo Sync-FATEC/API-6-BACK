@@ -71,8 +71,11 @@ class RegistroETL:
         })
 
     def salvar(self):
+        historico_path = LOG_DIR / "historico_etl.jsonl"
+        execucao_id = self._proximo_id_execucao(historico_path)
         registro = {
-            "pipeline": "ETL ASG-SP",
+            "pipeline": f"ETL ASG-SP #{execucao_id}",
+            "execucao_id": execucao_id,
             "inicio": self.inicio.isoformat(),
             "fim": datetime.now().isoformat(),
             "duracao_total_segundos": round((datetime.now() - self.inicio).total_seconds(), 1),
@@ -82,29 +85,41 @@ class RegistroETL:
             "erros": self.erros,
             "sucesso": len(self.erros) == 0,
         }
-        historico_path = LOG_DIR / "historico_etl.jsonl"
         with open(historico_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(registro, ensure_ascii=False) + "\n")
         logger.info("Registro salvo em %s", historico_path)
         return registro
 
-def salvar(self):
-        registro = {
-            "pipeline": "ETL ASG-SP",
-            "inicio": self.inicio.isoformat(),
-            "fim": datetime.now().isoformat(),
-            "duracao_total_segundos": round((datetime.now() - self.inicio).total_seconds(), 1),
-            "etapa_solicitada": self.etapa_solicitada,
-            "entidades": self.entidades_solicitadas,
-            "etapas": self.etapas,
-            "erros": self.erros,
-            "sucesso": len(self.erros) == 0,
-        }
-        historico_path = LOG_DIR / "historico_etl.jsonl"
-        with open(historico_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(registro, ensure_ascii=False) + "\n")
-        logger.info("Registro salvo em %s", historico_path)
-        return registro
+    def _proximo_id_execucao(self, historico_path: Path) -> int:
+        """Gera identificador incremental de execução para exibição no histórico."""
+        if not historico_path.exists():
+            return 1
+
+        ultimo_id = 0
+        with open(historico_path, "r", encoding="utf-8") as f:
+            for linha in f:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    reg = json.loads(linha)
+                except json.JSONDecodeError:
+                    continue
+
+                valor = reg.get("execucao_id")
+                if isinstance(valor, int):
+                    ultimo_id = max(ultimo_id, valor)
+                    continue
+
+                pipeline_nome = str(reg.get("pipeline", ""))
+                if pipeline_nome.startswith("ETL ASG-SP #"):
+                    try:
+                        numero = int(pipeline_nome.rsplit("#", 1)[-1].strip())
+                        ultimo_id = max(ultimo_id, numero)
+                    except ValueError:
+                        pass
+
+        return ultimo_id + 1
 
 
 def etapa_extract(registro: RegistroETL, entidades: list) -> bool:
@@ -160,7 +175,7 @@ def etapa_extract(registro: RegistroETL, entidades: list) -> bool:
 def etapa_transform_load(registro: RegistroETL, entidades: list) -> bool:
     """TRANSFORM + LOAD: Textualiza e carrega no PostgreSQL."""
     logger.info("=" * 60)
-    logger.info("ETAPA 2/4: TRANSFORM + LOAD - Inserindo dados NOVOS no banco")
+    logger.info("ETAPA 2/4: TRANSFORM + LOAD - Aplicando UPSERT (inserção e atualização) no banco")
     logger.info("=" * 60)
     inicio = time.time()
 

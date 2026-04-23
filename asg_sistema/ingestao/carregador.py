@@ -53,18 +53,37 @@ def carregar_tudo(caminho_dados: Path, entidades: list[str] = None):
 
 
 def _inserir_fonte(metadados: dict) -> int:
+    nome = metadados.get("fonte", "")
+    payload = {
+        "nome": nome,
+        "descricao": metadados.get("descricao", ""),
+        "url": metadados.get("url_origem", ""),
+        "data": metadados.get("data_coleta"),
+        "total": metadados.get("total_registros", 0),
+        "escopo": metadados.get("escopo", "Estado de São Paulo"),
+    }
+    existente = executar_consulta(
+        "SELECT id FROM fontes WHERE nome = :nome ORDER BY id LIMIT 1",
+        {"nome": nome},
+    )
+    if existente:
+        executar_sql(
+            """UPDATE fontes
+               SET descricao = :descricao,
+                   url_origem = :url,
+                   data_coleta = :data,
+                   total_registros = :total,
+                   escopo = :escopo
+               WHERE id = :id""",
+            {**payload, "id": existente[0]["id"]},
+        )
+        return existente[0]["id"]
+
     resultado = executar_consulta(
         """INSERT INTO fontes (nome, descricao, url_origem, data_coleta, total_registros, escopo)
-        VALUES (:nome, :descricao, :url, :data, :total, :escopo)
-        RETURNING id""",
-        {
-            "nome": metadados.get("fonte", ""),
-            "descricao": metadados.get("descricao", ""),
-            "url": metadados.get("url_origem", ""),
-            "data": metadados.get("data_coleta"),
-            "total": metadados.get("total_registros", 0),
-            "escopo": metadados.get("escopo", "Estado de São Paulo"),
-        },
+           VALUES (:nome, :descricao, :url, :data, :total, :escopo)
+           RETURNING id""",
+        payload,
     )
     return resultado[0]["id"]
 
@@ -81,7 +100,15 @@ def _inserir_corpus(doc: dict):
         """INSERT INTO corpus_asg
         (fonte, tipo_registro, uf_sigla, municipio, data_referencia, texto, metadados_json, hash_registro)
         VALUES (:fonte, :tipo, :uf_sigla, :municipio, :data_ref, :texto, :meta, :hash_reg)
-        ON CONFLICT (hash_registro) DO NOTHING""",
+        ON CONFLICT (hash_registro) DO UPDATE
+        SET fonte = EXCLUDED.fonte,
+            tipo_registro = EXCLUDED.tipo_registro,
+            uf_sigla = EXCLUDED.uf_sigla,
+            municipio = EXCLUDED.municipio,
+            data_referencia = EXCLUDED.data_referencia,
+            texto = EXCLUDED.texto,
+            metadados_json = EXCLUDED.metadados_json,
+            embedding = NULL""",
         {
             "fonte": doc["fonte"],
             "tipo": doc["tipo_registro"],
@@ -166,7 +193,16 @@ def _carregar_queimadas(caminho: Path):
                     CASE WHEN :lat IS NOT NULL AND :lon IS NOT NULL
                          THEN ST_SetSRID(ST_MakePoint(:lon, :lat), 4674)
                          ELSE NULL END)
-            ON CONFLICT (data_hora, latitude, longitude) DO NOTHING""",
+            ON CONFLICT (data_hora, latitude, longitude) DO UPDATE
+            SET fonte_id = EXCLUDED.fonte_id,
+                satelite = EXCLUDED.satelite,
+                municipio = EXCLUDED.municipio,
+                estado = EXCLUDED.estado,
+                bioma = EXCLUDED.bioma,
+                frp = EXCLUDED.frp,
+                risco_fogo = EXCLUDED.risco_fogo,
+                precipitacao = EXCLUDED.precipitacao,
+                geom = EXCLUDED.geom""",
             {
                 "fid": fonte_id,
                 "lat": lat,
@@ -268,7 +304,15 @@ def _carregar_deter(caminho: Path):
                     CASE WHEN CAST(:geom AS TEXT) IS NOT NULL
                          THEN ST_SetSRID(ST_GeomFromGeoJSON(CAST(:geom AS TEXT)), 4674)
                          ELSE NULL END)
-            ON CONFLICT (data_avistamento, municipio, area_total_km2) DO NOTHING""",
+            ON CONFLICT (data_avistamento, municipio, area_total_km2) DO UPDATE
+            SET fonte_id = EXCLUDED.fonte_id,
+                classe = EXCLUDED.classe,
+                uf = EXCLUDED.uf,
+                sensor = EXCLUDED.sensor,
+                satelite = EXCLUDED.satelite,
+                area_uc_km2 = EXCLUDED.area_uc_km2,
+                nome_uc = EXCLUDED.nome_uc,
+                geom = EXCLUDED.geom""",
             {
                 "fid": fonte_id,
                 "cls": props.get("classname", ""),
@@ -314,7 +358,13 @@ def _carregar_ucs(caminho: Path):
             """INSERT INTO unidades_conservacao
             (fonte_id, nome, categoria, grupo, esfera, uf, municipio, area_ha)
             VALUES (:fid, :nome, :cat, :grupo, :esfera, :uf, :mun, :area)
-            ON CONFLICT (nome, esfera) DO NOTHING""",
+            ON CONFLICT (nome, esfera) DO UPDATE
+            SET fonte_id = EXCLUDED.fonte_id,
+                categoria = EXCLUDED.categoria,
+                grupo = EXCLUDED.grupo,
+                uf = EXCLUDED.uf,
+                municipio = EXCLUDED.municipio,
+                area_ha = EXCLUDED.area_ha""",
             {
                 "fid": fonte_id,
                 "nome": reg.get("NOME", reg.get("nome", "")),
@@ -367,7 +417,18 @@ def _carregar_prodes(caminho: Path):
                     CASE WHEN CAST(:geom AS TEXT) IS NOT NULL
                          THEN ST_SetSRID(ST_GeomFromGeoJSON(CAST(:geom AS TEXT)), 4674)
                          ELSE NULL END)
-            ON CONFLICT (uid) DO NOTHING""",
+            ON CONFLICT (uid) DO UPDATE
+            SET fonte_id = EXCLUDED.fonte_id,
+                estado = EXCLUDED.estado,
+                classe_principal = EXCLUDED.classe_principal,
+                classe_nome = EXCLUDED.classe_nome,
+                data_imagem = EXCLUDED.data_imagem,
+                ano = EXCLUDED.ano,
+                area_km = EXCLUDED.area_km,
+                fonte_bioma = EXCLUDED.fonte_bioma,
+                satelite = EXCLUDED.satelite,
+                sensor = EXCLUDED.sensor,
+                geom = EXCLUDED.geom""",
             {
                 "fid": fonte_id,
                 "uid": props.get("uid"),
@@ -425,7 +486,14 @@ def _carregar_palmares(caminho: Path):
             (fonte_id, municipio, uf, comunidade, codigo_ibge,
              processo_fcp, ano_certificacao, processo_incra, regiao)
             VALUES (:fid, :mun, :uf, :com, :ibge, :proc, :ano, :incra, :regiao)
-            ON CONFLICT (comunidade, municipio) DO NOTHING""",
+            ON CONFLICT (comunidade, municipio) DO UPDATE
+            SET fonte_id = EXCLUDED.fonte_id,
+                uf = EXCLUDED.uf,
+                codigo_ibge = EXCLUDED.codigo_ibge,
+                processo_fcp = EXCLUDED.processo_fcp,
+                ano_certificacao = EXCLUDED.ano_certificacao,
+                processo_incra = EXCLUDED.processo_incra,
+                regiao = EXCLUDED.regiao""",
             {
                 "fid": fonte_id,
                 "mun": municipio,
@@ -484,8 +552,18 @@ def _carregar_sicar(caminho_geojson: Path):
                  ELSE NULL END
         )
         ON CONFLICT (cod_imovel) DO UPDATE 
-        SET ind_status = EXCLUDED.ind_status, 
-            dat_atualizacao = EXCLUDED.dat_atualizacao, 
+        SET fonte_id = EXCLUDED.fonte_id,
+            cod_tema = EXCLUDED.cod_tema,
+            nom_tema = EXCLUDED.nom_tema,
+            ind_status = EXCLUDED.ind_status,
+            ind_tipo = EXCLUDED.ind_tipo,
+            des_condic = EXCLUDED.des_condic,
+            municipio = EXCLUDED.municipio,
+            cod_estado = EXCLUDED.cod_estado,
+            num_area = EXCLUDED.num_area,
+            mod_fiscal = EXCLUDED.mod_fiscal,
+            dat_criacao = EXCLUDED.dat_criacao,
+            dat_atualizacao = EXCLUDED.dat_atualizacao,
             geom = EXCLUDED.geom
     """
 

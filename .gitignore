@@ -21,6 +21,7 @@ modelos_salvos/*.pkl
 .env
 .venv/
 .claude
+encurtador/
 
 # Logs
 logs/*.log
