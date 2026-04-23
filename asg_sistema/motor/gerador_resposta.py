@@ -148,83 +148,104 @@ class GeradorResposta:
         else:
             resumo = f"O imóvel {cod} ({area} ha, {mun}) não apresenta problemas ambientais detectados na região."
 
-        # GeoJSON: fazenda + ameaças
         features = []
 
-        # Polígono da fazenda
         if imovel.get("geometry"):
             features.append({
                 "type": "Feature",
                 "geometry": imovel["geometry"],
                 "properties": {
-                    "tipo": "fazenda", "cod_imovel": cod,
-                    "municipio": mun, "area_ha": area, "status": status,
+                    "texto": f"Imóvel rural cadastrado no SICAR/CAR com código {cod}. Situação: {status}.",
+                    "fonte": "sicar",
+                    "cod_imovel": cod,
+                    "municipio": mun,
+                    "num_area": area,
+                    "ind_status": imovel.get("ind_status", status),
+                    "ind_tipo": imovel.get("ind_tipo", "IRU"),
+                    "des_condic": imovel.get("des_condic", ""),
+                    "mod_fiscal": imovel.get("mod_fiscal", ""),
+                    "data_referencia": imovel.get("dat_atualizacao", ""),
                 },
             })
 
-        # Ameaças geográficas
-        for item in q.get("geo", []):
-            if item.get("geometry"):
-                features.append({
-                    "type": "Feature",
-                    "geometry": item["geometry"],
-                    "properties": {
-                        "tipo": "queimada", "fonte": "queimadas",
-                        "satelite": item.get("satelite", ""),
-                        "data_hora": str(item.get("data_hora", "")),
-                        "frp": item.get("frp"),
-                        "distancia_km": round(float(item.get("distancia_km") or 0), 2),
-                    },
-                })
-        for item in d.get("geo", []):
-            if item.get("geometry"):
-                features.append({
-                    "type": "Feature",
-                    "geometry": item["geometry"],
-                    "properties": {
-                        "tipo": "deter", "fonte": "deter",
-                        "classe": item.get("classe", ""),
-                        "data_avistamento": str(item.get("data_avistamento", "")),
-                        "area_km2": item.get("area_total_km2"),
-                        "distancia_km": round(float(item.get("distancia_km") or 0), 2),
-                    },
-                })
-        for item in p.get("geo", []):
-            if item.get("geometry"):
-                features.append({
-                    "type": "Feature",
-                    "geometry": item["geometry"],
-                    "properties": {
-                        "tipo": "prodes", "fonte": "prodes",
-                        "ano": item.get("ano"),
-                        "area_km": item.get("area_km"),
-                        "distancia_km": round(float(item.get("distancia_km") or 0), 2),
-                    },
-                })
-        for item in ti.get("sobreposicoes", []):
-            if item.get("geometry"):
-                features.append({
-                    "type": "Feature",
-                    "geometry": item["geometry"],
-                    "properties": {
-                        "tipo": "terra_indigena", "fonte": "funai",
-                        "nome": item.get("nome", ""),
-                        "etnia": item.get("etnia", ""),
-                        "sobreposicao_ha": item.get("area_sobreposicao_ha", 0),
-                    },
-                })
-        for item in ti.get("proximas_10km", []):
-            if item.get("geometry"):
-                features.append({
-                    "type": "Feature",
-                    "geometry": item["geometry"],
-                    "properties": {
-                        "tipo": "terra_indigena", "fonte": "funai",
-                        "nome": item.get("nome", ""),
-                        "etnia": item.get("etnia", ""),
-                        "distancia_km": item.get("distancia_km", 0),
-                    },
-                })
+            for item in q.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Foco de queimada detectado a {round(float(item.get('distancia_km') or 0), 2)}km.",
+                            "fonte": "queimadas",
+                            "satelite": item.get("satelite", ""),
+                            "data_referencia": str(item.get("data_hora", "")),
+                            "frp": item.get("frp"),
+                            "bioma": item.get("bioma", ""),
+                            "risco_fogo": item.get("risco_fogo", ""),
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
+                    
+            for item in d.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Alerta DETER da classe {item.get('classe', '')}.",
+                            "fonte": "deter",
+                            "classe": item.get("classe", ""),
+                            "data_referencia": str(item.get("data_avistamento", "")),
+                            "area_total_km2": item.get("area_total_km2"),
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
+                    
+            for item in p.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Polígono PRODES de desmatamento do ano {item.get('ano', '')}.",
+                            "fonte": "prodes",
+                            "ano": item.get("ano"),
+                            "classe_nome": item.get("classe_nome", f"d{item.get('ano')}"),
+                            "area_km": item.get("area_km"),
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
+                    
+            for item in ti.get("sobreposicoes", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Terra Indígena {item.get('nome', '')}.",
+                            "fonte": "funai",
+                            "nome": item.get("nome", ""),
+                            "etnia": item.get("etnia", ""),
+                            "fase": item.get("fase", ""),
+                            "area_ha": item.get("area_ha", ""),
+                            "sobreposicao_ha": item.get("area_sobreposicao_ha", 0),
+                        },
+                    })
+                    
+            for item in ti.get("proximas_10km", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Terra Indígena {item.get('nome', '')}.",
+                            "fonte": "funai",
+                            "nome": item.get("nome", ""),
+                            "etnia": item.get("etnia", ""),
+                            "fase": item.get("fase", ""),
+                            "area_ha": item.get("area_ha", ""),
+                            "distancia_km": item.get("distancia_km", 0),
+                        },
+                    })
 
         geojson = {"type": "FeatureCollection", "features": features} if features else None
 
