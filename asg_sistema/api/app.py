@@ -15,9 +15,7 @@ from typing import cast
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import StreamingResponse
 
 from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_geo, rotas_pipeline, rotas_dashboard
 from asg_sistema.db.conexao import SessionLocal, engine
@@ -28,8 +26,6 @@ from asg_sistema.scheduler.gerenciador import (
     iniciar_scheduler,
     registrar_job,
 )
-
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -84,14 +80,6 @@ app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
 app.include_router(rotas_pipeline.router, prefix="/api/etl", tags=["Pipeline ETL"])
 app.include_router(rotas_dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(agendamento_router, prefix="/api/v1")
-
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(FRONTEND_DIR / "templates"))
-
-
-@app.get("/", response_class=HTMLResponse)
-def pagina_inicial(request: Request):
-    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/api/saude")
