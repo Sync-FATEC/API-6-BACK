@@ -137,25 +137,39 @@ def _sub_score_terras_indigenas(dados: dict) -> tuple[float, list[str]]:
     return 0.0, fatores
 
 
-def _sub_score_contexto(dados_ucs: dict, dados_ql: dict) -> tuple[float, list[str]]:
-    """Sub-score 0-1 para contexto municipal (UCs + quilombolas)."""
+def _sub_score_quilombolas(dados_ql: dict) -> tuple[float, list[str]]:
+    """Sub-score 0-1 para comunidades quilombolas no município.
+
+    Fonte é Palmares (sem geometria), por isso o cruzamento é municipal:
+    cada comunidade certificada soma 0.3 (cap em 1.0).
+    """
+    fatores = []
+    total_ql = int(dados_ql.get("total") or 0)
+
+    if total_ql == 0:
+        return 0.0, fatores
+
+    sub = min(1.0, total_ql * 0.3)
+    fatores.append(f"{total_ql} comunidade(s) quilombola(s) no município")
+    return sub, fatores
+
+
+def _sub_score_contexto(dados_ucs: dict) -> tuple[float, list[str]]:
+    """Sub-score 0-1 para contexto municipal (apenas UCs)."""
     fatores = []
     total_ucs = int(dados_ucs.get("total") or 0)
     integral = int(dados_ucs.get("protecao_integral") or 0)
     sustentavel = int(dados_ucs.get("uso_sustentavel") or 0)
-    total_ql = int(dados_ql.get("total") or 0)
 
-    if total_ucs == 0 and total_ql == 0:
+    if total_ucs == 0:
         return 0.0, fatores
 
-    sub = min(1.0, integral * 0.2 + sustentavel * 0.1 + total_ql * 0.15)
+    sub = min(1.0, integral * 0.25 + sustentavel * 0.1)
 
     if integral > 0:
         fatores.append(f"{integral} UC(s) de proteção integral no município")
     if sustentavel > 0:
         fatores.append(f"{sustentavel} UC(s) de uso sustentável no município")
-    if total_ql > 0:
-        fatores.append(f"{total_ql} comunidade(s) quilombola(s) no município")
 
     return sub, fatores
 
@@ -189,14 +203,15 @@ def calcular_score_ahp(cruzamento: dict, area_fazenda_km2: float) -> dict:
     sub_scores_raw["terras_indigenas"] = sub_t
     fatores_todos.extend(fat_t)
 
+    sub_ql, fat_ql = _sub_score_quilombolas(cruzamento.get("quilombolas", {}))
+    sub_scores_raw["terras_quilombolas"] = sub_ql
+    fatores_todos.extend(fat_ql)
+
     sub_p, fat_p = _sub_score_prodes(cruzamento.get("prodes", {}), area_fazenda_km2)
     sub_scores_raw["desmatamento_prodes"] = sub_p
     fatores_todos.extend(fat_p)
 
-    sub_c, fat_c = _sub_score_contexto(
-        cruzamento.get("unidades_conservacao", {}),
-        cruzamento.get("quilombolas", {}),
-    )
+    sub_c, fat_c = _sub_score_contexto(cruzamento.get("unidades_conservacao", {}))
     sub_scores_raw["contexto_municipal"] = sub_c
     fatores_todos.extend(fat_c)
 

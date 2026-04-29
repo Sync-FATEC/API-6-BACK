@@ -11,6 +11,7 @@ CRITERIOS_ASG = [
     "queimadas",
     "desmatamento_deter",
     "terras_indigenas",
+    "terras_quilombolas",
     "desmatamento_prodes",
     "contexto_municipal",
 ]
@@ -27,17 +28,22 @@ CRITERIOS_ASG = [
 #   2,4,6,8 = valores intermediários
 #
 # Justificativa dos julgamentos:
-# - Queimadas e DETER (eventos ativos/recentes) > TI (risco legal) >
-#   PRODES (histórico) > Contexto municipal (indireto)
+# - Queimadas e DETER (eventos ativos/recentes) > TI (risco legal com geometria
+#   FUNAI) > Quilombolas (risco legal análogo, mas dado municipal sem geometria) >
+#   PRODES (histórico) > Contexto municipal (UCs, fator indireto)
 # - Queimadas e DETER têm importância equivalente (peso 1 entre eles)
+# - TI vs Quilombola = 2: TI tem polígono oficial e jurisprudência consolidada;
+#   Quilombola hoje é só "comunidades certificadas no município" (sinal mais
+#   fraco). Quando o banco incorporar geometrias do INCRA, revisar para 1.
 #
-#                    Q     D     T     P     C
+#                    Q     D     T     QL    P     C
 MATRIZ_COMPARACAO = [
-    [1.0,  1.0,  2.0,  3.0,  5.0],   # Queimadas (Q)
-    [1.0,  1.0,  2.0,  3.0,  5.0],   # DETER (D)
-    [0.5,  0.5,  1.0,  2.0,  4.0],   # TI (T)
-    [1/3,  1/3,  0.5,  1.0,  3.0],   # PRODES (P)
-    [0.2,  0.2,  0.25, 1/3,  1.0],   # Contexto (C)
+    [1.0,  1.0,  2.0,  2.0,  3.0,  5.0],   # Queimadas (Q)
+    [1.0,  1.0,  2.0,  2.0,  3.0,  5.0],   # DETER (D)
+    [0.5,  0.5,  1.0,  2.0,  2.0,  4.0],   # TI (T)
+    [0.5,  0.5,  0.5,  1.0,  2.0,  4.0],   # Quilombolas (QL)
+    [1/3,  1/3,  0.5,  0.5,  1.0,  3.0],   # PRODES (P)
+    [0.2,  0.2,  0.25, 0.25, 1/3,  1.0],   # Contexto (C)
 ]
 
 
@@ -120,7 +126,8 @@ def obter_info_ahp() -> dict:
         "consistencia": CONSISTENCIA_ASG,
         "justificativa": (
             "Queimadas e DETER (eventos ativos) têm peso equivalente e maior, "
-            "seguidos por Terras Indígenas (risco legal), PRODES (histórico) "
-            "e Contexto Municipal (fator indireto via UCs e quilombolas)."
+            "seguidos por Terras Indígenas (risco legal com geometria FUNAI), "
+            "Terras Quilombolas (risco legal análogo, dado municipal Palmares), "
+            "PRODES (histórico) e Contexto Municipal (UCs, fator indireto)."
         ),
     }

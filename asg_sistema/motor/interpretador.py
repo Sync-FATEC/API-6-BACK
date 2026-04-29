@@ -117,6 +117,12 @@ class InterpretadorConsulta:
         preprocessado = self.preprocessador.preprocessar(pergunta)
         intencao, confianca = self.classificador.classificar(texto_clf)
 
+        entidades_pre = self.extrator_entidades.extrair(pergunta)
+        cod_pre = entidades_pre.get("cod_imovel") or (cod_imovel.strip() if cod_imovel else None)
+        if cod_pre and (confianca < 0.3 or intencao not in MAPA_INTENCAO_FONTE):
+            intencao = "consultar_imovel_rural"
+            confianca = max(confianca, 0.6)
+
         if confianca < 0.3 or intencao not in MAPA_INTENCAO_FONTE:
             ent_prev = {}
             if cod_imovel and str(cod_imovel).strip():
@@ -146,7 +152,7 @@ class InterpretadorConsulta:
                 ),
             }
 
-        entidades = self.extrator_entidades.extrair(pergunta)
+        entidades = entidades_pre
         if cod_imovel and str(cod_imovel).strip():
             entidades["cod_imovel"] = str(cod_imovel).strip()
 
