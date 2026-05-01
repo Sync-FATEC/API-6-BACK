@@ -1,16 +1,16 @@
-{% macro barra_metrica(nome, valor, distancia, is_last=false) %}
-    {% set percentual = (valor / 20) * 100 %}
+{% macro barra_metrica(nome, valor, distancia, max_valor, is_last=false) %}
+    {% set percentual = (valor / max_valor) * 100 %}
     
-    {% if valor <= 4 %}
+    {% if percentual <= 20 %}
         {% set cor_bg = 'bg-asg-great' %}
         {% set cor_texto = 'text-asg-great' %}
-    {% elif valor <= 8 %}
+    {% elif percentual <= 40 %}
         {% set cor_bg = 'bg-asg-good' %}
         {% set cor_texto = 'text-asg-good' %}
-    {% elif valor <= 12 %}
+    {% elif percentual <= 60 %}
         {% set cor_bg = 'bg-asg-okay' %}
         {% set cor_texto = 'text-asg-okay' %}
-    {% elif valor <= 16 %}
+    {% elif percentual <= 80 %}
         {% set cor_bg = 'bg-asg-bad' %}
         {% set cor_texto = 'text-asg-bad' %}
     {% else %}
@@ -30,22 +30,22 @@
 
         <div class="relative w-full mt-1 text-sm font-bold">
             
-            {% if valor == 0 or valor > 2 %}
+            {% if valor == 0 or percentual > 10 %}
                 <span class="absolute left-0 {% if valor == 0 %}{{ cor_texto }}{% else %}text-slate-600{% endif %}">
                     0
                 </span>
             {% endif %}
 
-            {% if valor > 0 and valor < 20 %}
+            {% if valor > 0 and valor < max_valor %}
                 <span class="absolute {{ cor_texto }}" 
                       style="left: {{ percentual }}%; transform: translateX(-50%);">
-                    {{ "%02d" | format(valor) }}
+                    {{ valor }}
                 </span>
             {% endif %}
 
-            {% if valor == 20 or valor < 18 %}
-                <span class="absolute right-0 {% if valor == 20 %}{{ cor_texto }}{% else %}text-slate-600{% endif %}">
-                    20
+            {% if valor == max_valor or percentual < 90 %}
+                <span class="absolute right-0 {% if valor == max_valor %}{{ cor_texto }}{% else %}text-slate-600{% endif %}">
+                    {{ max_valor }}
                 </span>
             {% endif %}
             

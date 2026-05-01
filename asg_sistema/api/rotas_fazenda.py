@@ -88,81 +88,43 @@ def _montar_dados_template(
 
 
 def _montar_lista_riscos(cruzamento: dict, sub_scores: dict) -> list:
-    q  = cruzamento.get("queimadas", {})
-    d  = cruzamento.get("deter", {})
-    p  = cruzamento.get("prodes", {})
-    ti = cruzamento.get("terras_indigenas", {})
-    ql = cruzamento.get("quilombolas", {})
-    uc = cruzamento.get("unidades_conservacao", {})
-
-    # Distância mínima de desmatamento (deter ou prodes)
-    dist_demat = min(
-        float(d.get("distancia_min_km") or 999),
-        float(p.get("distancia_min_km") or 999),
-    )
-    if dist_demat == 999:
-        dist_demat = 0.0
-
-    # Distância terra indígena
-    proximas_ti = ti.get("proximas_10km") or []
-    if ti.get("sobrepoe"):
-        dist_ti = 0.0
-    elif proximas_ti:
-        dists = [float(t.get("distancia_km", 0)) for t in proximas_ti if isinstance(t, dict)]
-        dist_ti = min(dists) if dists else 0.0
-    else:
-        dist_ti = 0.0
-
-    # Converte sub_scores (0-100) para escala do template (0-20)
-    def _para_20(chave: str) -> int:
-        return min(20, round(float(sub_scores.get(chave, 0)) / 5))
-
-    demat_val = min(20, round(max(
-        float(sub_scores.get("desmatamento_deter", 0)),
-        float(sub_scores.get("desmatamento_prodes", 0)),
-    ) / 5))
-
-    # UC e quilombola compõem contexto_municipal — separa proporcionalmente
-    total_uc = int(uc.get("total") or 0)
-    total_ql = int(ql.get("total") or 0)
-    contexto_raw = float(sub_scores.get("contexto_municipal", 0))
-    if total_uc + total_ql > 0:
-        peso_uc = total_uc / (total_uc + total_ql)
-        peso_ql = 1 - peso_uc
-    else:
-        peso_uc = peso_ql = 0.5
-
-    uc_val = min(20, round(contexto_raw * peso_uc / 5))
-    ql_val = min(20, round(contexto_raw * peso_ql / 5))
+    def calc_valor(chave: str, max_valor: float):
+        score_raw = float(sub_scores.get(chave, 0))
+        val = round((score_raw / 100.0) * max_valor, 1)
+        return int(val) if val.is_integer() else val
 
     return [
         {
-            "nome": "Desmatamento",
-            "valor": demat_val,
-            "distancia": f"{dist_demat:.1f}km",
+            "nome": "Queimadas",
+            "valor": calc_valor("queimadas", 28),
+            "max_valor": 28,
         },
         {
-            "nome": "Queimada",
-            "valor": _para_20("queimadas"),
-            "distancia": f"{float(q.get('distancia_min_km') or 0):.1f}km",
+            "nome": "Desmatamento DETER",
+            "valor": calc_valor("desmatamento_deter", 28),
+            "max_valor": 28,
         },
         {
-            "nome": "Terra Indígena",
-            "valor": _para_20("terras_indigenas"),
-            "distancia": f"{dist_ti:.1f}km",
+            "nome": "Terras Indígenas",
+            "valor": calc_valor("terras_indigenas", 18),
+            "max_valor": 18,
         },
         {
-            "nome": "Terra Quilombola",
-            "valor": ql_val,
-            "distancia": "0.0km" if total_ql > 0 else "-",
+            "nome": "Terras Quilombolas",
+            "valor": calc_valor("terras_quilombolas", 14),
+            "max_valor": 14,
         },
         {
-            "nome": "Unid. Conservação",
-            "valor": uc_val,
-            "distancia": "0.0km" if total_uc > 0 else "-",
+            "nome": "Desmatamento PRODES",
+            "valor": calc_valor("desmatamento_prodes", 9),
+            "max_valor": 9,
+        },
+        {
+            "nome": "Contexto Municipal",
+            "valor": calc_valor("contexto_municipal", 4),
+            "max_valor": 4,
         },
     ]
-
 
 def _formatar_data(valor) -> str:
     if not valor:
@@ -178,7 +140,6 @@ def _formatar_data(valor) -> str:
 # GeoJSON para o mapa
 # ---------------------------------------------------------------------------
 
-
 def _montar_geojson(imovel: dict, cruzamento: dict) -> dict:
     features = []
 
@@ -189,14 +150,22 @@ def _montar_geojson(imovel: dict, cruzamento: dict) -> dict:
             "properties": {"tipo": "fazenda"},
         })
 
-    for item in (cruzamento.get("prodes", {}).get("geo") or []):
-        geom = item.get("geometry") if isinstance(item, dict) else None
-        if geom:
-            features.append({
-                "type": "Feature",
-                "geometry": geom,
-                "properties": {"tipo": "prodes"},
-            })
+    def extrair_geometrias(chave_cruzamento: str, tipo_nome: str):
+        for item in (cruzamento.get(chave_cruzamento, {}).get("geo") or []):
+            geom = item.get("geometry") if isinstance(item, dict) else None
+            if geom:
+                features.append({
+                    "type": "Feature",
+                    "geometry": geom,
+                    "properties": {"tipo": tipo_nome},
+                })
+
+    extrair_geometrias("prodes", "desmatamento")
+    extrair_geometrias("deter", "desmatamento")
+    extrair_geometrias("queimadas", "queimadas")
+    extrair_geometrias("terras_indigenas", "terras_indigenas")
+    extrair_geometrias("quilombolas", "quilombolas")
+    extrair_geometrias("unidades_conservacao", "unidades_conservacao")
 
     return {"type": "FeatureCollection", "features": features}
 
@@ -204,7 +173,6 @@ def _montar_geojson(imovel: dict, cruzamento: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Mapa satélite
 # ---------------------------------------------------------------------------
-
 
 def _gerar_mapa(geojson_data: dict, output_path: str) -> bool:
     try:
@@ -218,19 +186,38 @@ def _gerar_mapa(geojson_data: dict, output_path: str) -> bool:
 
         fig, ax = plt.subplots(figsize=(8, 16))
 
-        fazenda = df[df["tipo"] == "fazenda"]
-        prodes  = df[df["tipo"] == "prodes"]
+        estilos = {
+            "fazenda": {"color": "#16acf7", "label": "Fazenda"},
+            "desmatamento": {"color": "#f77f00", "label": "Desmatamento (PRODES/DETER)"},
+            "queimadas": {"color": "#ff4444", "label": "Queimadas"},
+            "terras_indigenas": {"color": "#55a630", "label": "Terra Indígena"},
+            "quilombolas": {"color": "#7A360F", "label": "Terra Quilombola"},
+            "unidades_conservacao": {"color": "#9d4edd", "label": "Unid. Conservação"}
+        }
 
-        if not fazenda.empty:
-            fazenda.plot(ax=ax, facecolor="#1682f0", alpha=0.3, edgecolor="#1682f0", linewidth=1, zorder=1)
-        if not prodes.empty:
-            prodes.plot(ax=ax, facecolor="#F61247", alpha=0.3, edgecolor="#F61247", linewidth=1, zorder=2)
+        legend_elements = []
 
-        legend_elements = [
-            Patch(facecolor="#1682f0", edgecolor="#1682f0", alpha=0.3, label="Fazenda"),
-            Patch(facecolor="#F61247", edgecolor="#F61247", alpha=0.3, label="Desmatamento (PRODES)"),
-        ]
-        ax.legend(handles=legend_elements, loc="lower left", fontsize=8, frameon=True)
+        for tipo, config in estilos.items():
+            df_tipo = df[df["tipo"] == tipo]
+            
+            if not df_tipo.empty:
+                z = 1 if tipo == "fazenda" else 2
+                
+                df_tipo.plot(
+                    ax=ax, 
+                    facecolor=config["color"], 
+                    alpha=0.3, 
+                    edgecolor=config["color"], 
+                    linewidth=1, 
+                    zorder=z
+                )
+                
+                legend_elements.append(
+                    Patch(facecolor=config["color"], edgecolor=config["color"], alpha=0.3, label=config["label"])
+                )
+
+        if legend_elements:
+            ax.legend(handles=legend_elements, loc="lower left", fontsize=8, frameon=True)
 
         minx, miny, maxx, maxy = df.total_bounds
         margin = 0.1
@@ -238,12 +225,13 @@ def _gerar_mapa(geojson_data: dict, output_path: str) -> bool:
         ax.set_xlim(minx - dx * margin, maxx + dx * margin)
         ax.set_ylim(miny - dy * margin, maxy + dy * margin)
 
-        ctx.add_basemap(ax, source=ctx.providers.OpenStreetMap.Mapnik, attribution=False)
+        ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron, attribution=False)
         ax.set_axis_off()
 
         plt.savefig(output_path, bbox_inches="tight", pad_inches=0, dpi=200, transparent=True)
         plt.close()
         return True
+        
     except Exception as e:
         print(f"[ERRO] Falha ao gerar mapa: {e}")
         return False

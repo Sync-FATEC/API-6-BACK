@@ -19,7 +19,6 @@
           margin-left: 8px;
         }
       }
-      
     </style>
   </head>
   <body class="bg-white text-slate-800 font-sans">
@@ -47,7 +46,7 @@
         <p class="text-sm text-slate-600 truncate ml-3 mb-5">
           {{ codigo_imovel }}
         </p>
-        <div class="bg-slate-950 h-116 w-full flex items-center justify-center">
+        <div class="bg-slate-950 h-136 w-full flex items-center justify-center">
           {% if mapa_url %}
           <img src="{{ mapa_url }}" class="w-full h-full object-contain" />
           {% else %}
@@ -66,8 +65,8 @@
         ></div>
 
         {% for risco in lista_riscos %} {{ barra_metrica( nome=risco.nome,
-        valor=risco.valor, distancia=risco.distancia, is_last=loop.last ) }} {%
-        endfor %}
+        valor=risco.valor, distancia=risco.distancia, max_valor=risco.max_valor,
+        is_last=loop.last ) }} {% endfor %}
       </section>
       <section
         class="border-[0.5px] border-solid border-slate-200 info-padding col-span-2"

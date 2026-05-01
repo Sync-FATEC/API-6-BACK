@@ -10,6 +10,9 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from shapely.geometry import shape
 
+# Comando pra ativar o tailwind:
+# npx tailwindcss -i ./templates/tailwind.css -o ./static/relatorio.css --watch
+
 def gerar_mapa_satelite(geojson_data, output_path):
     try:
         df = gpd.GeoDataFrame.from_features(geojson_data["features"])
