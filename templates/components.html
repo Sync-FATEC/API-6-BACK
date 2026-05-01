@@ -54,13 +54,16 @@
 {% endmacro %}
 
 {% macro nota_final(valor) %}
-    {% if valor <= 20 %}
+    {% if valor == 0 %}
+        {% set cor_texto = 'text-slate-400' %}
+        {% set cor_barra = 'bg-slate-400' %}
+    {% elif valor <= 10 %}
         {% set cor_texto = 'text-asg-great' %}
         {% set cor_barra = 'bg-asg-great' %}
-    {% elif valor <= 40 %}
+    {% elif valor <= 20 %}
         {% set cor_texto = 'text-asg-good' %}
         {% set cor_barra = 'bg-asg-good' %}
-    {% elif valor <= 60 %}
+    {% elif valor <= 40 %}
         {% set cor_texto = 'text-asg-okay' %}
         {% set cor_barra = 'bg-asg-okay' %}
     {% elif valor <= 80 %}
@@ -81,4 +84,5 @@
                 / 100
             </span>
         </div>
+    </div>
 {% endmacro %}

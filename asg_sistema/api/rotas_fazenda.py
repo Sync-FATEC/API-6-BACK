@@ -151,14 +151,24 @@ def _montar_geojson(imovel: dict, cruzamento: dict) -> dict:
         })
 
     def extrair_geometrias(chave_cruzamento: str, tipo_nome: str):
-        for item in (cruzamento.get(chave_cruzamento, {}).get("geo") or []):
-            geom = item.get("geometry") if isinstance(item, dict) else None
-            if geom:
-                features.append({
-                    "type": "Feature",
-                    "geometry": geom,
-                    "properties": {"tipo": tipo_nome},
-                })
+        dados_risco = cruzamento.get(chave_cruzamento, {})
+        
+        listas_busca = [
+            dados_risco.get("geo") or [],
+            dados_risco.get("proximas_10km") or [],
+            dados_risco.get("proximas_3km") or [],
+            dados_risco.get("sobreposicoes") or []
+        ]
+        
+        for lista in listas_busca:
+            for item in lista:
+                geom = item.get("geometry") if isinstance(item, dict) else None
+                if geom:
+                    features.append({
+                        "type": "Feature",
+                        "geometry": geom,
+                        "properties": {"tipo": tipo_nome},
+                    })
 
     extrair_geometrias("prodes", "desmatamento")
     extrair_geometrias("deter", "desmatamento")
