@@ -34,16 +34,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-log_arquivo = LOG_DIR / f"etl_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(str(log_arquivo), encoding="utf-8"),
-    ],
-)
 logger = logging.getLogger("etl_pipeline")
 
 
@@ -772,8 +762,27 @@ def main():
         default=None,
         help="Identificador da execucao para rastreamento de status.",
     )
-    
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Caminho para arquivo de log existente (modo append).",
+    )
+
     args = parser.parse_args()
+
+    log_arquivo = Path(args.log_file) if args.log_file else LOG_DIR / f"etl_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(str(log_arquivo), mode="a", encoding="utf-8"),
+        ],
+    )
+    if args.log_file:
+        logger.info("=" * 60)
+        logger.info("PIPELINE ETL - continuando no arquivo de log existente")
 
     if args.agendar:
         agendar(args.agendar)
