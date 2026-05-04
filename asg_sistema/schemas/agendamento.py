@@ -90,6 +90,11 @@ class AgendamentoCreate(BaseModel):
         ),
         json_schema_extra={"example": "2026-04-08"},
     )
+    etapa: str = Field(
+        default="full",
+        description="Etapa do pipeline a executar: 'extract', 'load', 'embed', 'validate' ou 'full'.",
+        json_schema_extra={"example": "full"},
+    )
 
     @model_validator(mode="after")
     def validar_intervalo_por_unidade(self) -> "AgendamentoCreate":
@@ -116,6 +121,7 @@ class AgendamentoUpdate(BaseModel):
     unidade: Optional[UnidadeRecorrencia] = Field(default=None, json_schema_extra={"example": "mes"})
     horario: Optional[time] = Field(default=None, json_schema_extra={"example": "03:00"})
     data_inicio: Optional[date] = Field(default=None, json_schema_extra={"example": "2026-04-08"})
+    etapa: Optional[str] = Field(default=None, json_schema_extra={"example": "full"})
     ativo: Optional[bool] = None
 
 
@@ -124,17 +130,19 @@ class AgendamentoResponse(BaseModel):
     intervalo: int
     unidade: str
     horario: str                      # "HH:MM" para fácil leitura
+    etapa: str                        # "extract" | "load" | "embed" | "validate" | "full"
     cron_expressao: str
     ativo: bool
     criado_em: datetime
     atualizado_em: datetime
     ultima_execucao_em: Optional[datetime]
+    proxima_execucao_em: Optional[datetime] = None
     ultimo_status: Optional[str]
     ultima_mensagem: Optional[str]
 
     model_config = {"from_attributes": True}
 
-    @field_serializer('criado_em', 'atualizado_em', 'ultima_execucao_em', when_used='json')
+    @field_serializer('criado_em', 'atualizado_em', 'ultima_execucao_em', 'proxima_execucao_em', when_used='json')
     def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
         """Adiciona timezone explicit (+00:00) às datas para conversão correta no frontend"""
         if value is None:
@@ -154,5 +162,14 @@ class StatusExecucaoResponse(BaseModel):
     ativo: bool
     job_registrado_no_scheduler: bool
     ultima_execucao_em: Optional[datetime]
+    proxima_execucao_em: Optional[datetime] = None
     ultimo_status: Optional[str]
     ultima_mensagem: Optional[str]
+
+    @field_serializer('ultima_execucao_em', 'proxima_execucao_em', when_used='json')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()

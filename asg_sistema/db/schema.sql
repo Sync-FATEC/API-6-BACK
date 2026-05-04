@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS fontes (
 CREATE TABLE IF NOT EXISTS terras_indigenas (
     id SERIAL PRIMARY KEY,
     fonte_id INTEGER REFERENCES fontes(id),
-    codigo INTEGER,
+    codigo INTEGER UNIQUE,
     nome VARCHAR(200),
     etnia VARCHAR(300),
     municipio VARCHAR(200),
@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS queimadas (
     frp DOUBLE PRECISION,
     risco_fogo DOUBLE PRECISION,
     precipitacao DOUBLE PRECISION,
-    geom GEOMETRY(Point, 4674)
+    geom GEOMETRY(Point, 4674),
+    CONSTRAINT unique_queimada UNIQUE (data_hora, latitude, longitude)
 );
 
 CREATE INDEX IF NOT EXISTS idx_queimadas_geom ON queimadas USING GIST(geom);
@@ -64,7 +65,8 @@ CREATE TABLE IF NOT EXISTS desmatamento_alertas (
     area_total_km2 DOUBLE PRECISION,
     area_uc_km2 DOUBLE PRECISION,
     nome_uc VARCHAR(300),
-    geom GEOMETRY(MultiPolygon, 4674)
+    geom GEOMETRY(MultiPolygon, 4674),
+    CONSTRAINT unique_deter UNIQUE (data_avistamento, municipio, area_total_km2)
 );
 
 CREATE INDEX IF NOT EXISTS idx_demat_geom ON desmatamento_alertas USING GIST(geom);
@@ -81,7 +83,8 @@ CREATE TABLE IF NOT EXISTS unidades_conservacao (
     uf VARCHAR(200),
     municipio TEXT,
     area_ha DOUBLE PRECISION,
-    situacao VARCHAR(50)
+    situacao VARCHAR(50),
+    CONSTRAINT unique_uc UNIQUE (nome, esfera)
 );
 
 CREATE INDEX IF NOT EXISTS idx_uc_municipio ON unidades_conservacao(municipio);
@@ -90,7 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_uc_municipio ON unidades_conservacao(municipio);
 CREATE TABLE IF NOT EXISTS prodes_desmatamento (
     id SERIAL PRIMARY KEY,
     fonte_id INTEGER REFERENCES fontes(id),
-    uid INTEGER,
+    uid INTEGER UNIQUE,
     estado VARCHAR(5) CHECK (UPPER(TRIM(estado)) = 'SP'),
     classe_principal VARCHAR(50),
     classe_nome VARCHAR(50),
@@ -117,7 +120,8 @@ CREATE TABLE IF NOT EXISTS comunidades_quilombolas (
     processo_fcp VARCHAR(100),
     ano_certificacao INTEGER,
     processo_incra VARCHAR(100),
-    regiao VARCHAR(50)
+    regiao VARCHAR(50),
+    CONSTRAINT unique_quilombo UNIQUE (comunidade, municipio)
 );
 
 CREATE INDEX IF NOT EXISTS idx_quilombola_municipio ON comunidades_quilombolas(municipio);
@@ -126,7 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_quilombola_municipio ON comunidades_quilombolas(m
 CREATE TABLE IF NOT EXISTS sicar_imoveis (
     id SERIAL PRIMARY KEY,
     fonte_id INTEGER REFERENCES fontes(id),
-    cod_imovel VARCHAR(254),
+    cod_imovel VARCHAR(254) UNIQUE,
     cod_tema VARCHAR(254),
     nom_tema VARCHAR(254),
     ind_status VARCHAR(10),
@@ -146,7 +150,27 @@ CREATE INDEX IF NOT EXISTS idx_sicar_municipio ON sicar_imoveis(municipio);
 CREATE INDEX IF NOT EXISTS idx_sicar_cod_imovel ON sicar_imoveis(cod_imovel);
 CREATE INDEX IF NOT EXISTS idx_sicar_status ON sicar_imoveis(ind_status);
 
--- Corpus textualizado + embeddings para busca semantica
+-- Agendamentos de Atualização (ASG)
+CREATE TABLE IF NOT EXISTS agendamentos_atualizacao (
+    id                  SERIAL PRIMARY KEY,
+
+    -- Recorrência em linguagem simples
+    intervalo           INTEGER NOT NULL,               -- ex: 1, 2, 3
+    unidade             VARCHAR(10) NOT NULL,           -- 'hora' | 'dia' | 'semana' | 'mes'
+    horario             VARCHAR(5) NOT NULL DEFAULT '02:00',  -- 'HH:MM'
+    etapa               VARCHAR(20) NOT NULL DEFAULT 'full',  -- 'extract' | 'load' | 'embed' | 'validate' | 'full'
+
+    -- Expressão cron derivada automaticamente
+    cron_expressao      VARCHAR(100) NOT NULL,
+
+    ativo               BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em           TIMESTAMP DEFAULT NOW(),
+    atualizado_em       TIMESTAMP DEFAULT NOW(),
+    ultima_execucao_em  TIMESTAMP,
+    ultimo_status       VARCHAR(20),                    -- 'sucesso' | 'erro' | 'executando'
+    ultima_mensagem     TEXT
+);
+
 CREATE TABLE IF NOT EXISTS corpus_asg (
     id SERIAL PRIMARY KEY,
     fonte VARCHAR(100) NOT NULL,
@@ -158,10 +182,10 @@ CREATE TABLE IF NOT EXISTS corpus_asg (
     texto_preprocessado TEXT,
     registro_id INTEGER,
     embedding vector(384),
-    metadados_json JSONB
+    metadados_json JSONB,
+    hash_registro VARCHAR(64) UNIQUE
 );
 
--- Migração para bancos já existentes que ainda não possuem uf_sigla
 ALTER TABLE corpus_asg ADD COLUMN IF NOT EXISTS uf_sigla VARCHAR(5);
 UPDATE corpus_asg SET uf_sigla = 'SP' WHERE uf_sigla IS NULL OR TRIM(uf_sigla) = '';
 ALTER TABLE corpus_asg ALTER COLUMN uf_sigla SET DEFAULT 'SP';

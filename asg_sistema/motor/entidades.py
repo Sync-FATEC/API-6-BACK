@@ -1,4 +1,4 @@
-"""Extracao de entidades: municipios e periodos temporais."""
+"""Extracao de entidades: municipios, periodos temporais e codigo CAR (SICAR)."""
 
 import re
 from datetime import datetime, timedelta
@@ -33,7 +33,18 @@ class ExtratorEntidades:
     def extrair(self, texto: str) -> dict:
         municipios = self._extrair_municipios(texto)
         periodo = self._extrair_periodo(texto)
-        return {"municipios": municipios, "periodo": periodo}
+        out: dict = {"municipios": municipios, "periodo": periodo}
+        # Extração do outro dev (cod_imovel único)
+        cod = extrair_cod_imovel_do_texto(texto)
+        if cod:
+            out["cod_imovel"] = cod
+        # Extração adicional para cruzamento espacial (lista de códigos)
+        codigos_car = self._extrair_codigos_car(texto)
+        if codigos_car:
+            out["codigos_car"] = codigos_car
+            if not out.get("cod_imovel"):
+                out["cod_imovel"] = codigos_car[0]
+        return out
 
     def _extrair_municipios(self, texto: str) -> list[str]:
         texto_lower = texto.lower()
@@ -43,6 +54,12 @@ class ExtratorEntidades:
                 if nome_original not in encontrados:
                     encontrados.append(nome_original)
         return encontrados
+
+    def _extrair_codigos_car(self, texto: str) -> list[str]:
+        """Extrai códigos CAR no padrão UF-IBGE-SEQUENCIAL (ex: SP-3524808-123456789ABC)."""
+        padrao = r'\b([A-Z]{2}[-.]?\d{7}[-.]?\w{12,})\b'
+        matches = re.findall(padrao, texto, re.IGNORECASE)
+        return [m.upper().replace(".", "-") for m in matches]
 
     def _extrair_periodo(self, texto: str) -> dict:
         texto_lower = texto.lower()
@@ -76,3 +93,27 @@ def _remover_acentos(texto: str) -> str:
     import unicodedata
     nfkd = unicodedata.normalize("NFKD", texto)
     return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+_PADROES_COD_IMOVEL = [
+    re.compile(
+        r"(?i)(?:c(?:ó|o)digo\s*)?(?:do\s+)?(?:\bcar\b|\bsicar\b)\s*[:#]?\s*([A-Z0-9.\-_]{12,})",
+    ),
+    re.compile(
+        r"\b((?:BR[\-_./]?(?:[A-Z]{2})[\-_./]?)?[A-Z]{2}[\-_]\d{4,}(?:[.\-_0-9A-Za-z]{8,}))\b",
+    ),
+]
+
+
+def extrair_cod_imovel_do_texto(texto: str) -> str | None:
+    """Extrai cod_imovel (CAR) mencionado na pergunta."""
+    if not texto or not texto.strip():
+        return None
+    t = texto.strip()
+    for rx in _PADROES_COD_IMOVEL:
+        m = rx.search(t)
+        if m:
+            cod = m.group(1).strip(" .,:;")
+            if len(cod) >= 12:
+                return cod
+    return None

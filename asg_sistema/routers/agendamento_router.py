@@ -26,7 +26,13 @@ from asg_sistema.schemas.agendamento import (
     StatusExecucaoResponse,
     recorrencia_para_cron,
 )
-from asg_sistema.scheduler.gerenciador import job_existe, registrar_job, remover_job
+from asg_sistema.scheduler.gerenciador import (
+    job_existe, 
+    registrar_job, 
+    remover_job, 
+    obter_proxima_execucao
+)
+from asg_sistema.services.servico_atualizacao import executar_atualizacao_completa
 
 router = APIRouter(prefix="/agendamentos", tags=["Agendamento de Atualização"])
 
@@ -59,6 +65,7 @@ def criar_agendamento(
         intervalo=payload.intervalo,
         unidade=payload.unidade,
         horario=payload.horario.strftime("%H:%M"),
+        etapa=payload.etapa,
         cron_expressao=payload.cron_expressao,
     )
     db.add(agendamento)
@@ -77,7 +84,10 @@ def criar_agendamento(
     summary="Lista todos os agendamentos",
 )
 def listar_agendamentos(db: Session = Depends(obter_sessao)):
-    return db.query(AgendamentoAtualizacao).order_by(AgendamentoAtualizacao.id).all()
+    agendamentos = db.query(AgendamentoAtualizacao).order_by(AgendamentoAtualizacao.id).all()
+    for ag in agendamentos:
+        ag.proxima_execucao_em = obter_proxima_execucao(ag.id)
+    return agendamentos
 
 
 @router.get(
@@ -89,6 +99,9 @@ def obter_agendamento(agendamento_id: int, db: Session = Depends(obter_sessao)):
     agendamento = db.get(AgendamentoAtualizacao, agendamento_id)
     if not agendamento:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
+    
+    # Adiciona proxima_execucao_em dinamicamente para o schema
+    agendamento.proxima_execucao_em = obter_proxima_execucao(agendamento_id)
     return agendamento
 
 
@@ -142,6 +155,8 @@ def atualizar_agendamento(
     else:
         background_tasks.add_task(remover_job, agendamento.id)
 
+    # Adiciona proxima_execucao_em dinamicamente para o schema
+    agendamento.proxima_execucao_em = obter_proxima_execucao(agendamento_id)
     return agendamento
 
 
@@ -184,6 +199,30 @@ def cancelar_agendamento(agendamento_id: int, background_tasks: BackgroundTasks,
     return agendamento
 
 
+@router.post(
+    "/{agendamento_id}/executar",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Dispara o agendamento manualmente agora",
+)
+async def executar_agendamento_agora(
+    agendamento_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(obter_sessao),
+):
+    """
+    Dispara a execução do agendamento imediatamente, sem esperar pela próxima recorrência.
+    Utiliza BackgroundTasks para não bloquear a resposta da API.
+    """
+    agendamento = db.get(AgendamentoAtualizacao, agendamento_id)
+    if not agendamento:
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
+
+    # Dispara a execução em background
+    background_tasks.add_task(executar_atualizacao_completa, agendamento_id)
+
+    return {"status": "disparado", "mensagem": "A execução foi iniciada em background."}
+
+
 @router.delete(
     "/{agendamento_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -224,6 +263,7 @@ def status_agendamento(agendamento_id: int, db: Session = Depends(obter_sessao))
         ativo=agendamento.ativo,
         job_registrado_no_scheduler=job_existe(agendamento.id),
         ultima_execucao_em=agendamento.ultima_execucao_em,
+        proxima_execucao_em=obter_proxima_execucao(agendamento.id),
         ultimo_status=agendamento.ultimo_status,
         ultima_mensagem=agendamento.ultima_mensagem,
     )

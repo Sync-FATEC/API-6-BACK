@@ -1,6 +1,7 @@
 """Gera respostas rastreavies com resumo, estatisticas, fontes e GeoJSON."""
 
 import json
+from datetime import datetime
 
 
 SP_BBOX = (-53.2, -25.4, -44.1, -19.8)
@@ -32,7 +33,15 @@ class GeradorResposta:
         else:
             resumo = self._gerar_resumo(intencao, total_geo, entidades)
 
-        return {
+        # Nota de risco apenas em consultas por código CAR (gerar_resposta_car).
+        # Consultas gerais não recebem score — não há objeto de análise definido.
+        nota_risco_vazia = {
+            "nota": 0,
+            "nivel": "sem_dados",
+            "fatores": [],
+            "por_dimensao": {},
+        }
+        resposta = {
             "pergunta": pergunta,
             "intencao_detectada": intencao,
             "confianca": round(confianca, 3),
@@ -43,6 +52,420 @@ class GeradorResposta:
             "fontes": self._extrair_fontes(resultados),
             "geojson": geojson,
             "total_resultados": total_geo,
+            "nota_risco": None,
+        }
+        resposta["exportacao_relatorio"] = self._montar_exportacao_relatorio(
+            pergunta=pergunta,
+            intencao=intencao,
+            resumo=resumo,
+            nota_risco=nota_risco_vazia,
+            dados_origem=resultados,
+            dados=self._normalizar_linhas_tabela(resultados),
+            fontes=resposta["fontes"],
+            total_resultados=total_geo,
+            entidades=entidades,
+        )
+        return resposta
+
+    def gerar_resposta_car(self, pergunta: str, imovel: dict, cruzamento: dict) -> dict:
+        """Gera resposta completa para consulta por código CAR com cruzamento espacial."""
+        cod = imovel.get("cod_imovel", "")
+        mun = imovel.get("municipio", "")
+        area = round(float(imovel.get("area_ha_calc") or imovel.get("num_area") or 0), 1)
+        
+        ameacas, resumo_ameacas = self._extrair_ameacas_e_resumo(cruzamento)
+        
+        status_map = {"AT": "Ativo", "PE": "Pendente", "SU": "Suspenso", "CA": "Cancelado"}
+        status_raw = imovel.get("ind_status", "")
+        status = status_map.get(status_raw, status_raw if status_raw else "Ativo")
+
+        resumo = f"Análise do imóvel {cod} ({area} ha) em {mun}."
+        if resumo_ameacas:
+            resumo += f" Foram detectados: {resumo_ameacas}."
+        else:
+            resumo += " Nenhum problema ambiental detectado na região imediata."
+
+        features = []
+        q = cruzamento.get("queimadas", {})
+        d = cruzamento.get("deter", {})
+        p = cruzamento.get("prodes", {})
+        ti = cruzamento.get("terras_indigenas", {})
+
+        if imovel.get("geometry"):
+            features.append({
+                "type": "Feature",
+                "geometry": imovel["geometry"],
+                "properties": {
+                    "texto": f"Imóvel rural cadastrado no SICAR/CAR com código {cod}. Situação: {status}.",
+                    "fonte": "sicar",
+                    "cod_imovel": cod,
+                    "municipio": mun,
+                    "num_area": area,
+                    "ind_status": imovel.get("ind_status", status),
+                    "ind_tipo": imovel.get("ind_tipo", "IRU"),
+                    "des_condic": imovel.get("des_condic", ""),
+                    "mod_fiscal": imovel.get("mod_fiscal", ""),
+                    "data_referencia": imovel.get("dat_atualizacao", ""),
+                },
+            })
+
+            for item in q.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Foco de queimada detectado a {round(float(item.get('distancia_km') or 0), 2)}km.",
+                            "fonte": "queimadas",
+                            "satelite": item.get("satelite", ""),
+                            "data_referencia": str(item.get("data_hora", "")),
+                            "frp": item.get("frp"),
+                            "bioma": item.get("bioma", ""),
+                            "risco_fogo": item.get("risco_fogo", ""),
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
+                    
+            for item in d.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Alerta DETER da classe {item.get('classe', '')}.",
+                            "fonte": "deter",
+                            "classe": item.get("classe", ""),
+                            "data_referencia": str(item.get("data_avistamento", "")),
+                            "area_total_km2": item.get("area_total_km2"),
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
+                    
+            for item in p.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Polígono PRODES de desmatamento do ano {item.get('ano', '')}.",
+                            "fonte": "prodes",
+                            "ano": item.get("ano"),
+                            "classe_nome": item.get("classe_nome", f"d{item.get('ano')}"),
+                            "area_km": item.get("area_km"),
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
+                    
+            for item in ti.get("sobreposicoes", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Terra Indígena {item.get('nome', '')}.",
+                            "fonte": "funai",
+                            "nome": item.get("nome", ""),
+                            "etnia": item.get("etnia", ""),
+                            "fase": item.get("fase", ""),
+                            "area_ha": item.get("area_ha", ""),
+                            "sobreposicao_ha": item.get("area_sobreposicao_ha", 0),
+                        },
+                    })
+                    
+            for item in ti.get("proximas_10km", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Terra Indígena {item.get('nome', '')}.",
+                            "fonte": "funai",
+                            "nome": item.get("nome", ""),
+                            "etnia": item.get("etnia", ""),
+                            "fase": item.get("fase", ""),
+                            "area_ha": item.get("area_ha", ""),
+                            "distancia_km": item.get("distancia_km", 0),
+                        },
+                    })
+
+        geojson = {"type": "FeatureCollection", "features": features} if features else None
+
+        fontes_usadas = []
+        fontes_set = set()
+        for a in ameacas:
+            fonte_id = a["tipo"]
+            if fonte_id not in fontes_set:
+                fontes_set.add(fonte_id)
+                nome = {
+                    "queimada": "INPE/Queimadas",
+                    "desmatamento_deter": "INPE/DETER",
+                    "desmatamento_prodes": "INPE/PRODES",
+                    "terra_indigena": "FUNAI",
+                    "unidade_conservacao": "MMA/ICMBio",
+                    "quilombola": "Fundação Cultural Palmares",
+                }.get(fonte_id, fonte_id)
+                fontes_usadas.append({"nome": nome, "identificador": fonte_id})
+
+        resposta = {
+            "pergunta": pergunta,
+            "intencao_detectada": "consultar_imovel_rural",
+            "confianca": 0.95,
+            "entidades": {"codigos_car": [cod]},
+            "imovel": {
+                "cod_imovel": cod,
+                "municipio": mun,
+                "area_ha": area,
+                "status": status,
+                "ind_tipo": imovel.get("ind_tipo", ""),
+                "des_condic": imovel.get("des_condic", ""),
+                "dat_criacao": imovel.get("dat_criacao", ""),
+                "dat_atualizacao": imovel.get("dat_atualizacao", ""),
+            },
+            "ameacas_encontradas": ameacas,
+            "cruzamento": cruzamento,
+            "resumo": resumo,
+            "estatisticas": {"total_ameacas": len(ameacas)},
+            "dados": [],
+            "fontes": fontes_usadas,
+            "geojson": geojson,
+            "total_resultados": len(features),
+        }
+        # Nota de risco via AHP (substitui a versão heurística)
+        from asg_sistema.motor.calculadora_risco import calcular_score_ahp
+        area_km2 = area / 100 if area else 0.01  # ha -> km²
+        nota_risco = calcular_score_ahp(cruzamento, area_km2)
+        resposta["nota_risco"] = nota_risco
+        resposta["exportacao_relatorio"] = self._montar_exportacao_relatorio(
+            pergunta=pergunta,
+            intencao="consultar_imovel_rural",
+            resumo=resumo,
+            nota_risco=nota_risco,
+            dados_origem=ameacas,
+            dados=self._normalizar_linhas_tabela_car(ameacas),
+            fontes=fontes_usadas,
+            total_resultados=len(ameacas),
+            entidades={"codigos_car": [cod]},
+            imovel=imovel,
+        )
+        return resposta
+
+    def gerar_ranking_risco(
+        self, resultados: list[dict], intencao: str, municipios: list[str]
+    ) -> dict:
+        """Gera resposta para consultas de maior/menor risco entre fazendas."""
+        local = f" no município de {municipios[0]}" if municipios else " no Estado de São Paulo"
+        tipo = "maior" if intencao == "consultar_maior_risco" else "menor"
+
+        if not resultados:
+            nota_risco_vazia = {"nota": 0, "nivel": "sem_dados", "fatores": [], "por_dimensao": {}}
+            return {
+                "intencao_detectada": intencao,
+                "confianca": 0.9,
+                "entidades": {"municipios": municipios},
+                "resumo": f"Nenhuma fazenda encontrada{local}.",
+                "estatisticas": {},
+                "dados": [],
+                "fontes": [{"nome": "SICAR/CAR", "identificador": "sicar"}],
+                "geojson": None,
+                "total_resultados": 0,
+                "nota_risco": nota_risco_vazia,
+                "imovel": None,
+                "ameacas_encontradas": [],
+                "ranking_risco": [],
+                "exportacao_relatorio": self._montar_exportacao_relatorio(
+                    pergunta="", intencao=intencao, resumo="",
+                    nota_risco=nota_risco_vazia, dados_origem=[], dados=[],
+                    fontes=[], total_resultados=0, entidades={"municipios": municipios},
+                ),
+            }
+
+        top = resultados[0]
+        nota = top["nota_risco"]["nota"]
+        nivel = top["nota_risco"]["nivel"]
+        cod = top["cod_imovel"]
+        mun = top["municipio"]
+        area = top["area_ha"]
+        cruzamento = top.get("cruzamento")
+
+        ameacas, resumo_ameacas = ([], "")
+        if cruzamento:
+            ameacas, resumo_ameacas = self._extrair_ameacas_e_resumo(cruzamento)
+
+        status_map = {"AT": "Ativo", "PE": "Pendente", "SU": "Suspenso", "CA": "Cancelado"}
+
+        fatores = top["nota_risco"].get("fatores", [])
+        fatores_txt = f" Fatores: {'; '.join(fatores)}." if fatores else ""
+        resumo = (
+            f"A fazenda com {tipo} risco socioambiental{local} é o imóvel {cod} "
+            f"({area} ha, {mun}), com nota {nota}/100 — nível {nivel}."
+        )
+        if resumo_ameacas:
+            resumo += f" Detalhes ambientais: {resumo_ameacas}."
+        elif fatores_txt:
+            resumo += fatores_txt
+        else:
+            resumo += " Nenhum problema ambiental crítico detectado."
+
+        features = []
+        if top.get("geometry"):
+            features.append({
+                "type": "Feature",
+                "geometry": top["geometry"],
+                "properties": {
+                    "texto": f"Imóvel {cod} — {tipo} risco: nota {nota} ({nivel})",
+                    "fonte": "sicar",
+                    "cod_imovel": cod,
+                    "municipio": mun,
+                    "num_area": area,
+                    "nota_risco": nota,
+                    "nivel_risco": nivel,
+                },
+            })
+
+        geojson = {"type": "FeatureCollection", "features": features} if features else None
+        total_final = len(features) if features else 0
+
+        ranking_resumido = [
+            {
+                "posicao": i + 1,
+                "cod_imovel": r["cod_imovel"],
+                "nom_tema": r.get("nom_tema", ""),
+                "municipio": r["municipio"],
+                "area_ha": r["area_ha"],
+                "nota": r["nota_risco"]["nota"],
+                "nivel": r["nota_risco"]["nivel"],
+                "fatores": r["nota_risco"].get("fatores", []),
+            }
+            for i, r in enumerate(resultados[:5])
+        ]
+
+        fontes = [{"nome": "SICAR/CAR", "identificador": "sicar"}]
+        return {
+            "intencao_detectada": intencao,
+            "confianca": 0.9,
+            "entidades": {"municipios": municipios},
+            "resumo": resumo,
+            "estatisticas": {"total_fazendas_analisadas": len(resultados)},
+            "dados": [],
+            "fontes": fontes,
+            "geojson": geojson,
+            "total_resultados": total_final,
+            "nota_risco": top["nota_risco"],
+            "imovel": {
+                "cod_imovel": cod,
+                "nom_tema": top.get("nom_tema"),
+                "municipio": mun,
+                "area_ha": area,
+                "ind_status": top.get("status"),
+                "status": status_map.get(top.get("status"), "Ativo"),
+                "ind_tipo": top.get("tipo", "IRU"),
+                "des_condic": top.get("condicao", "Aguardando"),
+                "mod_fiscal": top.get("mod_fiscal"),
+            },
+            "ameacas_encontradas": ameacas,
+            "ranking_risco": ranking_resumido,
+            "exportacao_relatorio": self._montar_exportacao_relatorio(
+                pergunta="",
+                intencao=intencao,
+                resumo=resumo,
+                nota_risco=top["nota_risco"],
+                dados_origem=ranking_resumido,
+                dados=[],
+                fontes=fontes,
+                total_resultados=len(resultados),
+                entidades={"municipios": municipios},
+                imovel=top,
+            ),
+        }
+
+    def _normalizar_linhas_tabela(self, resultados: list[dict]) -> list[dict]:
+        linhas = []
+        for r in resultados:
+            meta = self._parse_metadados(r)
+            linhas.append({
+                "fonte": r.get("fonte", ""),
+                "tipo_registro": r.get("tipo_registro", ""),
+                "municipio": r.get("municipio", ""),
+                "data_referencia": str(r.get("data_referencia", "") or ""),
+                "similaridade": round(float(r.get("similaridade") or 0), 4),
+                "descricao": r.get("texto", ""),
+                "metadados": meta,
+            })
+        return linhas
+
+    def _normalizar_linhas_tabela_car(self, ameacas: list[dict]) -> list[dict]:
+        linhas = []
+        for item in ameacas:
+            linhas.append({
+                "fonte": item.get("tipo", ""),
+                "tipo_registro": item.get("tipo", ""),
+                "municipio": "",
+                "data_referencia": "",
+                "similaridade": None,
+                "descricao": json.dumps(item, ensure_ascii=False, default=str),
+                "metadados": item,
+            })
+        return linhas
+
+    def _montar_exportacao_relatorio(
+        self,
+        pergunta: str,
+        intencao: str,
+        resumo: str,
+        nota_risco: dict,
+        dados_origem: list[dict],
+        dados: list[dict],
+        fontes: list[dict],
+        total_resultados: int,
+        entidades: dict,
+        imovel: dict | None = None,
+    ) -> dict:
+        """Payload estável para geração de relatório via Jinja2/PDF."""
+        tabela = {
+            "colunas": [
+                "fonte",
+                "tipo_registro",
+                "municipio",
+                "data_referencia",
+                "similaridade",
+                "descricao",
+                "metadados",
+            ],
+            "linhas": dados,
+            "total_linhas": len(dados),
+        }
+        metadados = {
+            "gerado_em": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "versao_payload": "1.0",
+            "pergunta_original": pergunta,
+            "intencao_detectada": intencao,
+            "total_resultados": total_resultados,
+            "total_registros_origem": len(dados_origem),
+            "fontes_consideradas": [f.get("identificador") for f in fontes],
+            "fontes_detalhes": fontes,
+            "entidades": entidades,
+        }
+        if imovel:
+            metadados["imovel"] = {
+                "cod_imovel": imovel.get("cod_imovel", ""),
+                "municipio": imovel.get("municipio", ""),
+                "area_ha": round(float(imovel.get("area_ha_calc") or imovel.get("num_area") or 0), 2),
+                "status": imovel.get("ind_status", ""),
+            }
+
+        return {
+            "resumo": {
+                "texto": resumo,
+                "total_itens": total_resultados,
+            },
+            "nota_asg": {
+                "valor": int(nota_risco.get("nota") or 0),
+                "nivel": nota_risco.get("nivel", "sem_dados"),
+                "fatores": nota_risco.get("fatores", []),
+                "por_dimensao": nota_risco.get("por_dimensao", {}),
+            },
+            "tabela": tabela,
+            "metadados": metadados,
         }
 
     def _gerar_resumo_multiplo(self, intencoes: list[dict], total: int,
@@ -60,6 +483,7 @@ class GeradorResposta:
             "consultar_unidade_conservacao": "unidades de conservação",
             "consultar_quilombola": "comunidades quilombolas",
             "consultar_prodes": "desmatamento PRODES",
+            "consultar_imovel_rural": "imóveis rurais (CAR/SICAR)",
             "resumo_municipal": "dados ASG",
         }
 
@@ -71,6 +495,7 @@ class GeradorResposta:
             "consultar_unidade_conservacao": {"icmbio"},
             "consultar_quilombola": {"palmares"},
             "consultar_prodes": {"prodes"},
+            "consultar_imovel_rural": {"sicar"},
             "resumo_municipal": set(),
         }
 
@@ -101,6 +526,9 @@ class GeradorResposta:
         if total == 0:
             return f"Nenhum resultado encontrado para sua consulta{local}."
 
+        cod_car = entidades.get("cod_imovel")
+        sufixo_car = f" (imóvel CAR {cod_car})" if cod_car else ""
+
         resumos = {
             "consultar_queimadas": f"Foram encontrados {total} registros de focos de queimada{local}.",
             "consultar_desmatamento": f"Foram encontrados {total} registros de desmatamento (DETER/PRODES){local}.",
@@ -108,7 +536,9 @@ class GeradorResposta:
             "consultar_unidade_conservacao": f"Foram encontradas {total} unidades de conservação{local}.",
             "consultar_quilombola": f"Foram encontradas {total} comunidades quilombolas{local}.",
             "consultar_prodes": f"Foram encontrados {total} registros de desmatamento PRODES{local}.",
-            "consultar_imovel_rural": f"Foram encontrados {total} imóveis rurais cadastrados no CAR{local}.",
+            "consultar_imovel_rural": (
+                f"Foram encontrados {total} imóveis rurais cadastrados no CAR{local}{sufixo_car}."
+            ),
             "resumo_municipal": f"Foram encontrados {total} registros ASG{local}.",
         }
         return resumos.get(intencao, f"Foram encontrados {total} resultados{local}.")
@@ -504,3 +934,80 @@ class GeradorResposta:
             except json.JSONDecodeError:
                 return {}
         return meta
+
+    def _extrair_ameacas_e_resumo(self, cruzamento: dict) -> tuple[list, str]:
+        """Extrai lista de objetos de ameaça e um resumo textual consolidado."""
+        ameacas = []
+        partes_resumo = []
+        
+        # Queimadas
+        q = cruzamento.get("queimadas", {})
+        if q and q.get("focos_total", 0) > 0:
+            ameacas.append({
+                "tipo": "queimada", "quantidade": q["focos_total"],
+                "dentro_imovel": q["focos_internos"],
+                "distancia_min_km": q["distancia_min_km"],
+                "frp_medio": round(q["frp_medio"], 1) if q["frp_medio"] else 0,
+            })
+            txt = f"{q['focos_total']} focos de queimada"
+            if q["focos_internos"] > 0:
+                txt += f" ({q['focos_internos']} dentro do imóvel)"
+            else:
+                txt += f" a {q['distancia_min_km']}km"
+            partes_resumo.append(txt)
+
+        # DETER
+        d = cruzamento.get("deter", {})
+        if d and d.get("total_alertas", 0) > 0:
+            ameacas.append({
+                "tipo": "desmatamento_deter", "quantidade": d["total_alertas"],
+                "area_intersecao_km2": d["area_intersecao_km2"],
+                "distancia_min_km": d["distancia_min_km"],
+            })
+            partes_resumo.append(f"{d['total_alertas']} alertas DETER a {d['distancia_min_km']}km")
+
+        # PRODES
+        p = cruzamento.get("prodes", {})
+        if p and p.get("total_poligonos", 0) > 0:
+            ameacas.append({
+                "tipo": "desmatamento_prodes", "quantidade": p["total_poligonos"],
+                "area_hist_km2": p["area_hist_km2"],
+                "distancia_min_km": p["distancia_min_km"],
+            })
+            partes_resumo.append(f"{p['total_poligonos']} polígonos PRODES a {p['distancia_min_km']}km")
+
+        # Terras Indígenas
+        ti = cruzamento.get("terras_indigenas", {})
+        if ti and (ti.get("sobrepoe") or ti.get("proximas_10km")):
+            ameacas.append({
+                "tipo": "terra_indigena",
+                "sobrepoe": ti["sobrepoe"],
+                "sobreposicoes": ti.get("sobreposicoes", []),
+                "proximas_10km": len(ti.get("proximas_10km", [])),
+            })
+            if ti["sobrepoe"]:
+                nomes = ", ".join(s["nome"] for s in ti.get("sobreposicoes", []))
+                partes_resumo.append(f"sobreposição com terra indígena: {nomes}")
+            elif ti.get("proximas_10km"):
+                partes_resumo.append(f"{len(ti['proximas_10km'])} terras indígenas a menos de 10km")
+
+        # Unidades de Conservação
+        uc = cruzamento.get("unidades_conservacao", {})
+        if uc and uc.get("total", 0) > 0:
+            ameacas.append({
+                "tipo": "unidade_conservacao", "quantidade": uc["total"],
+                "protecao_integral": uc["protecao_integral"],
+                "no_municipio": True,
+            })
+            partes_resumo.append(f"{uc['total']} unidades de conservação no município")
+
+        # Quilombolas
+        ql = cruzamento.get("quilombolas", {})
+        if ql and ql.get("total", 0) > 0:
+            ameacas.append({
+                "tipo": "quilombola", "quantidade": ql["total"],
+                "no_municipio": True,
+            })
+            partes_resumo.append(f"{ql['total']} comunidades quilombolas no município")
+
+        return ameacas, ", ".join(partes_resumo)
