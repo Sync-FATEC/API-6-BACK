@@ -452,6 +452,23 @@ def etapa_transform_load(registro: RegistroETL, entidades: list) -> bool:
 
         logger.info("Atualizando tabelas com registros recentes...")
         
+
+        contagens = {}
+
+        for tabela in [
+            "queimadas",
+            "terras_indigenas",
+            "desmatamento_alertas",
+            "unidades_conservacao",
+            "prodes_desmatamento",
+            "comunidades_quilombolas",
+            "sicar_imoveis",
+            "corpus_asg",
+        ]:
+            r = executar_consulta(f"SELECT COUNT(*) as total FROM {tabela}")
+            contagens[tabela] = r[0]["total"] if r else 0
+            logger.info("  %s: %d registros", tabela, contagens[tabela])
+
         carregar_tudo(config.caminho_dados, entidades)
 
         contagens = {}

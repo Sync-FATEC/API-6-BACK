@@ -92,6 +92,7 @@ async def executar_atualizacao_completa(agendamento_id: int, tentativa_atual: in
             agendamento,
             ultimo_status="sucesso",
             ultima_mensagem="Pipeline executado com sucesso",
+            atualizar_execucao=True,
         )
         db.commit()
         logger.info("=== Agendamento id=%d finalizado: SUCESSO ===", agendamento_id)
@@ -141,6 +142,7 @@ async def executar_atualizacao_completa(agendamento_id: int, tentativa_atual: in
                         agendamento,
                         ultimo_status="erro",
                         ultima_mensagem=f"Erro: {str(e)[:200]}",
+                        atualizar_execucao=True,
                     )
                     db.commit()
             except Exception as db_error:

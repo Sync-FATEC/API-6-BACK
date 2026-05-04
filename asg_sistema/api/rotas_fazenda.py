@@ -9,6 +9,8 @@ from pathlib import Path
 
 import contextily as ctx
 import geopandas as gpd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
@@ -235,7 +237,11 @@ def _gerar_mapa(geojson_data: dict, output_path: str) -> bool:
         ax.set_xlim(minx - dx * margin, maxx + dx * margin)
         ax.set_ylim(miny - dy * margin, maxy + dy * margin)
 
-        ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron, attribution=False)
+        try:
+            ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron, attribution=False)
+        except Exception as e_ctx:
+            print(f"[AVISO] Não foi possível carregar o mapa base: {e_ctx}")
+
         ax.set_axis_off()
 
         plt.savefig(output_path, bbox_inches="tight", pad_inches=0, dpi=200, transparent=True)

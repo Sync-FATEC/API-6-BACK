@@ -24,6 +24,8 @@ MAPA_INTENCAO_FONTE = {
     "consultar_prodes": "prodes",
     "consultar_imovel_rural": "sicar",
     "resumo_municipal": None,
+    "consultar_maior_risco": None,
+    "consultar_menor_risco": None,
 }
 
 MAPA_INTENCAO_FONTES_MULTIPLAS = {
@@ -122,6 +124,24 @@ class InterpretadorConsulta:
         if cod_pre and (confianca < 0.3 or intencao not in MAPA_INTENCAO_FONTE):
             intencao = "consultar_imovel_rural"
             confianca = max(confianca, 0.6)
+
+        _texto_lower = pergunta.lower()
+        _kw_maior = [
+            "maior risco", "mais risco", "risco mais alto", "risco maior", 
+            "mais perigosa", "pior risco", "fazenda com maior", "imóvel com maior",
+            "imovel com maior", "mais arriscada", "pior nota"
+        ]
+        _kw_menor = [
+            "menor risco", "menos risco", "risco mais baixo", "risco menor", 
+            "mais segura", "melhor risco", "fazenda com menor", "imóvel com menor",
+            "imovel com menor", "melhor nota", "menos arriscada"
+        ]
+        if any(kw in _texto_lower for kw in _kw_maior):
+            intencao = "consultar_maior_risco"
+            confianca = max(confianca, 0.95)
+        elif any(kw in _texto_lower for kw in _kw_menor):
+            intencao = "consultar_menor_risco"
+            confianca = max(confianca, 0.95)
 
         if confianca < 0.3 or intencao not in MAPA_INTENCAO_FONTE:
             ent_prev = {}
@@ -230,7 +250,9 @@ class InterpretadorConsulta:
         - sub.cod_imovel → caminho CAR (cruzamento espacial).
         - caso contrário → busca semântica padrão.
         """
-        if sub.eh_car:
+        if sub.intencao in ("consultar_maior_risco", "consultar_menor_risco"):
+            parcial = self._parcial_ranking_risco(sub, entidades_base)
+        elif sub.eh_car:
             parcial = self._parcial_car(sub)
         else:
             parcial = self._parcial_busca(preprocessado, sub, entidades_base)
@@ -300,6 +322,136 @@ class InterpretadorConsulta:
                 cruzamento=cruzamento,
             )
 
+        parcial["_raw_resultados"] = []
+        parcial["_raw_resultados_geo"] = []
+        return parcial
+
+    def _parcial_ranking_risco(self, sub: SubConsulta, entidades_base: dict) -> dict:
+        import json as _json
+        from asg_sistema.motor.calculadora_risco import calcular_score_ahp
+        from asg_sistema.db.conexao import executar_consulta
+
+        municipios = [sub.municipio] if sub.municipio else (entidades_base.get("municipios") or [])
+        ordem_desc = sub.intencao == "consultar_maior_risco"
+
+        filtros = ["geom IS NOT NULL", "ind_status = 'AT'"]
+        params: dict = {}
+        if municipios:
+            filtros.append("municipio ILIKE :municipio")
+            params["municipio"] = f"%{municipios[0]}%"
+
+        where = "WHERE " + " AND ".join(filtros)
+        
+        # Priorização de risco via SQL para selecionar os melhores candidatos para o AHP
+        if ordem_desc: # Maior Risco
+            sql_order = """
+                (CASE WHEN EXISTS (SELECT 1 FROM queimadas q WHERE ST_Intersects(sicar_imoveis.geom, q.geom)) THEN 1 ELSE 0 END +
+                 CASE WHEN EXISTS (SELECT 1 FROM desmatamento_alertas d WHERE ST_Intersects(sicar_imoveis.geom, d.geom)) THEN 1 ELSE 0 END) DESC,
+                num_area DESC
+            """
+        else: # Menor Risco
+            sql_order = """
+                (CASE WHEN EXISTS (SELECT 1 FROM queimadas q WHERE ST_Intersects(sicar_imoveis.geom, q.geom)) THEN 1 ELSE 0 END +
+                 CASE WHEN EXISTS (SELECT 1 FROM desmatamento_alertas d WHERE ST_Intersects(sicar_imoveis.geom, d.geom)) THEN 1 ELSE 0 END) ASC,
+                num_area ASC
+            """
+
+        fazendas = executar_consulta(
+            f"""SELECT cod_imovel, nom_tema, municipio, num_area,
+                       ind_status, ind_tipo, des_condic, mod_fiscal,
+                       ST_AsGeoJSON(geom) AS geometry_json
+                FROM sicar_imoveis
+                {where}
+                ORDER BY {sql_order}
+                LIMIT 30""",
+            params,
+        )
+
+        if not fazendas:
+            local = f" no município de {municipios[0]}" if municipios else " no Estado de São Paulo"
+            parcial = {
+                "intencao_detectada": sub.intencao,
+                "confianca": round(sub.confianca, 3),
+                "entidades": {"municipios": municipios},
+                "resumo": f"Nenhuma fazenda ativa encontrada{local}.",
+                "estatisticas": {},
+                "dados": [],
+                "fontes": [],
+                "geojson": None,
+                "total_resultados": 0,
+                "nota_risco": None,
+                "imovel": None,
+                "ameacas_encontradas": [],
+                "ranking_risco": [],
+                "exportacao_relatorio": self._exportacao_vazia(
+                    "", sub.intencao, {"municipios": municipios}
+                ),
+            }
+            parcial["_raw_resultados"] = []
+            parcial["_raw_resultados_geo"] = []
+            return parcial
+
+        resultados = []
+        for faz in fazendas:
+            try:
+                geom_json = faz.get("geometry_json")
+                if not geom_json:
+                    continue
+                mun = faz.get("municipio", "")
+                area_ha = float(faz.get("num_area") or 0)
+                area_km2 = area_ha / 100 if area_ha else 0.01
+
+                cruzamento = repositorio.cruzamento_espacial_imovel(geom_json, mun)
+                nota_risco = calcular_score_ahp(cruzamento, area_km2)
+
+                geom_dict = _json.loads(geom_json) if isinstance(geom_json, str) else geom_json
+                resultados.append({
+                    "cod_imovel": faz.get("cod_imovel", ""),
+                    "nom_tema": faz.get("nom_tema", ""),
+                    "municipio": mun,
+                    "area_ha": round(area_ha, 1),
+                    "status": faz.get("ind_status", "Ativo"),
+                    "tipo": faz.get("ind_tipo", "IRU"),
+                    "condicao": faz.get("des_condic", "Aguardando"),
+                    "mod_fiscal": faz.get("mod_fiscal"),
+                    "nota_risco": nota_risco,
+                    "cruzamento": cruzamento,
+                    "geometry": geom_dict,
+                })
+            except Exception:
+                continue
+
+        if not resultados:
+            local = f" no município de {municipios[0]}" if municipios else " no Estado de São Paulo"
+            parcial = {
+                "intencao_detectada": sub.intencao,
+                "confianca": round(sub.confianca, 3),
+                "entidades": {"municipios": municipios},
+                "resumo": f"Não foi possível calcular o risco das fazendas{local}.",
+                "estatisticas": {},
+                "dados": [],
+                "fontes": [],
+                "geojson": None,
+                "total_resultados": 0,
+                "nota_risco": None,
+                "imovel": None,
+                "ameacas_encontradas": [],
+                "ranking_risco": [],
+                "exportacao_relatorio": self._exportacao_vazia(
+                    "", sub.intencao, {"municipios": municipios}
+                ),
+            }
+            parcial["_raw_resultados"] = []
+            parcial["_raw_resultados_geo"] = []
+            return parcial
+
+        resultados.sort(key=lambda x: x["nota_risco"]["nota"], reverse=ordem_desc)
+
+        parcial = self.gerador.gerar_ranking_risco(
+            resultados=resultados,
+            intencao=sub.intencao,
+            municipios=municipios,
+        )
         parcial["_raw_resultados"] = []
         parcial["_raw_resultados_geo"] = []
         return parcial

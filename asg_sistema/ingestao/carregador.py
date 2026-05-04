@@ -367,13 +367,13 @@ def _carregar_ucs(caminho: Path):
                 area_ha = EXCLUDED.area_ha""",
             {
                 "fid": fonte_id,
-                "nome": reg.get("NOME", reg.get("nome", "")),
-                "cat": reg.get("CATEGORI3", reg.get("categoria", "")),
-                "grupo": reg.get("GRUPO", reg.get("grupo", "")),
-                "esfera": reg.get("ESFERA", reg.get("esfera", "")),
+                "nome": reg.get("nome_uc", reg.get("NOME", reg.get("nome", ""))),
+                "cat": reg.get("categoria", reg.get("CATEGORI3", "")),
+                "grupo": reg.get("grupo", reg.get("GRUPO", "")),
+                "esfera": reg.get("esfera", reg.get("ESFERA", "")),
                 "uf": _normalizar_uf(uf),
-                "mun": reg.get("MUNICIPIO", reg.get("municipio", "")),
-                "area": _para_float(reg.get("AREA_HA", reg.get("area_ha"))),
+                "mun": reg.get("municipio", reg.get("MUNICIPIO", "")),
+                "area": _para_float(reg.get("area_ha", reg.get("AREA_HA"))),
             },
         )
 

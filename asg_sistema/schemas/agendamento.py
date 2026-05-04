@@ -136,12 +136,13 @@ class AgendamentoResponse(BaseModel):
     criado_em: datetime
     atualizado_em: datetime
     ultima_execucao_em: Optional[datetime]
+    proxima_execucao_em: Optional[datetime] = None
     ultimo_status: Optional[str]
     ultima_mensagem: Optional[str]
 
     model_config = {"from_attributes": True}
 
-    @field_serializer('criado_em', 'atualizado_em', 'ultima_execucao_em', when_used='json')
+    @field_serializer('criado_em', 'atualizado_em', 'ultima_execucao_em', 'proxima_execucao_em', when_used='json')
     def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
         """Adiciona timezone explicit (+00:00) às datas para conversão correta no frontend"""
         if value is None:
@@ -161,5 +162,14 @@ class StatusExecucaoResponse(BaseModel):
     ativo: bool
     job_registrado_no_scheduler: bool
     ultima_execucao_em: Optional[datetime]
+    proxima_execucao_em: Optional[datetime] = None
     ultimo_status: Optional[str]
     ultima_mensagem: Optional[str]
+
+    @field_serializer('ultima_execucao_em', 'proxima_execucao_em', when_used='json')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
