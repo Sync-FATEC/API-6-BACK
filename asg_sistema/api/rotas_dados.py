@@ -45,10 +45,10 @@ def listar_queimadas(
         params["mun"] = f"%{municipio}%"
     if data_inicio:
         filtro += " AND data_hora >= :data_inicio"
-        params["data_inicio"] = data_inicio
+        params["data_inicio"] = data_inicio if len(data_inicio) > 10 else f"{data_inicio} 00:00:00"
     if data_fim:
         filtro += " AND data_hora <= :data_fim"
-        params["data_fim"] = data_fim
+        params["data_fim"] = data_fim if len(data_fim) > 10 else f"{data_fim} 23:59:59"
 
     return executar_consulta(
         f"""SELECT id, latitude, longitude, data_hora, satelite,
@@ -95,16 +95,37 @@ def listar_desmatamento(
         params["mun"] = f"%{municipio}%"
     if data_inicio:
         filtro += " AND data_avistamento >= :data_inicio"
-        params["data_inicio"] = data_inicio
+        params["data_inicio"] = data_inicio if len(data_inicio) > 10 else f"{data_inicio} 00:00:00"
     if data_fim:
         filtro += " AND data_avistamento <= :data_fim"
-        params["data_fim"] = data_fim
+        params["data_fim"] = data_fim if len(data_fim) > 10 else f"{data_fim} 23:59:59"
 
     return executar_consulta(
         f"""SELECT id, classe, municipio, data_avistamento, satelite,
                    area_total_km2, nome_uc
             FROM desmatamento_alertas {filtro}
             ORDER BY data_avistamento DESC LIMIT :limite""",
+        params,
+    )
+
+
+@router.get("/sicar")
+def listar_sicar(
+    municipio: str | None = Query(None),
+    limite: int = Query(100, le=1000)
+):
+    """Lista imóveis rurais (SICAR)."""
+    filtro = "WHERE UPPER(TRIM(cod_estado)) IN ('SP', '35')"
+    params: dict[str, str | int] = {"limite": limite}
+    
+    if municipio:
+        filtro += " AND municipio ILIKE :mun"
+        params["mun"] = f"%{municipio}%"
+
+    return executar_consulta(
+        f"""SELECT id, cod_imovel, nom_tema, ind_status, municipio, cod_estado, num_area
+            FROM sicar_imoveis {filtro}
+            ORDER BY id DESC LIMIT :limite""",
         params,
     )
 
@@ -162,7 +183,7 @@ def listar_prodes(
     data_fim: str | None = Query(None),
 ):
     """Retorna dados PRODES (desmatamento anual)."""
-    filtro = "WHERE UPPER(TRIM(uf)) = 'SP'"
+    filtro = "WHERE UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')"
     params: dict[str, str | int] = {}
     
     # Se houver filtro de data, aumenta o limite para pegar tudo do período
@@ -171,9 +192,9 @@ def listar_prodes(
     else:
         params["limite"] = limite
     
-    if municipio:
-        filtro += " AND municipio ILIKE :mun"
-        params["mun"] = f"%{municipio}%"
+    # if municipio:
+    #     filtro += " AND municipio ILIKE :mun"
+    #     params["mun"] = f"%{municipio}%"
     if data_inicio:
         filtro += " AND ano >= :data_inicio"
         params["data_inicio"] = data_inicio[:4]  # Extract year
@@ -182,8 +203,10 @@ def listar_prodes(
         params["data_fim"] = data_fim[:4]  # Extract year
 
     return executar_consulta(
-        f"""SELECT id, ano, classe_nome, area_km, municipio, uf
+        f"""SELECT id, ano, data_imagem, classe_nome, area_km, estado,
+                   ST_Y(ST_Centroid(geom)) AS latitude, 
+                   ST_X(ST_Centroid(geom)) AS longitude
             FROM prodes_desmatamento {filtro}
-            ORDER BY ano DESC LIMIT :limite""",
+            ORDER BY ano DESC, data_imagem DESC LIMIT :limite""",
         params,
     )

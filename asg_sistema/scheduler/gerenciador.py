@@ -59,3 +59,11 @@ def remover_job(agendamento_id: int):
 
 def job_existe(agendamento_id: int) -> bool:
     return scheduler.get_job(_job_id(agendamento_id)) is not None
+
+
+def obter_proxima_execucao(agendamento_id: int):
+    """Retorna o datetime da próxima execução do job."""
+    job = scheduler.get_job(_job_id(agendamento_id))
+    if job:
+        return job.next_run_time
+    return None

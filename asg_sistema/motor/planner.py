@@ -63,6 +63,8 @@ _NOMES_INTENCAO = {
     "consultar_prodes": "PRODES",
     "consultar_imovel_rural": "imóveis rurais",
     "resumo_municipal": "resumo",
+    "consultar_maior_risco": "fazenda com maior risco",
+    "consultar_menor_risco": "fazenda com menor risco",
 }
 
 

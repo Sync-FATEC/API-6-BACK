@@ -138,20 +138,39 @@ def _sub_score_terras_indigenas(dados: dict) -> tuple[float, list[str]]:
 
 
 def _sub_score_quilombolas(dados_ql: dict) -> tuple[float, list[str]]:
-    """Sub-score 0-1 para comunidades quilombolas no município.
-
-    Fonte é Palmares (sem geometria), por isso o cruzamento é municipal:
-    cada comunidade certificada soma 0.3 (cap em 1.0).
+    """Sub-score 0-1 para comunidades quilombolas.
+    
+    Regra:
+    - 1.0 (Nota 14) se houver sobreposição (invasão).
+    - 0.07 a 0.93 (Nota 1-13) se houver proximidade (0-10km).
+    - 0.07 (Nota 1) se estiver apenas no município (sem proximidade detectada).
+    - 0.0 caso contrário.
     """
     fatores = []
-    total_ql = int(dados_ql.get("total") or 0)
+    sobreposicoes = dados_ql.get("sobreposicoes") or []
+    proximas = dados_ql.get("proximas_10km") or []
+    total_mun = int(dados_ql.get("total_municipio") or 0)
 
-    if total_ql == 0:
-        return 0.0, fatores
+    # 1. Invasão (Nota Máxima)
+    if sobreposicoes:
+        nomes = [s.get("comunidade", "") for s in sobreposicoes]
+        fatores.append(f"INVASÃO de terra quilombola detectada: {', '.join(nomes)}")
+        return 1.0, fatores
 
-    sub = min(1.0, total_ql * 0.3)
-    fatores.append(f"{total_ql} comunidade(s) quilombola(s) no município")
-    return sub, fatores
+    # 2. Proximidade (Variação 1 a 13)
+    if proximas:
+        dist_min = min([float(p.get("distancia_km") or 10) for p in proximas])
+        # Mapeia 0-10km para 0.93-0.07
+        sub = max(0.07, min(0.93, 1.0 - (dist_min / 10.0)))
+        fatores.append(f"Comunidade quilombola detectada a {dist_min:.2f} km")
+        return sub, fatores
+
+    # 3. Apenas municipal (Nota 1 fixa)
+    if total_mun > 0:
+        fatores.append(f"{total_mun} comunidade(s) quilombola(s) no município")
+        return 0.07, fatores
+
+    return 0.0, fatores
 
 
 def _sub_score_contexto(dados_ucs: dict) -> tuple[float, list[str]]:
