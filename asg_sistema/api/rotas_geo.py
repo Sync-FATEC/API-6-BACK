@@ -16,8 +16,8 @@ def geojson_queimadas(municipio: str | None = Query(None), limite: int = Query(1
         params["mun"] = f"%{municipio}%"
 
     rows = executar_consulta(
-        f"""SELECT ST_AsGeoJSON(geom) as geometry, municipio, satelite,
-                   data_hora, bioma, frp
+        f"""SELECT ST_AsGeoJSON(geom) as geometry, id, municipio, satelite,
+                   data_hora, bioma, frp, latitude, longitude
             FROM queimadas {filtro}
             ORDER BY data_hora DESC LIMIT :limite""",
         params,

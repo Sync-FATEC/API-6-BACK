@@ -1,35 +1,24 @@
 {
   "titulo": "Coleta de Dados ASG - Estado de São Paulo",
-  "data_execucao": "2026-05-03T21:12:15.715129",
+  "data_execucao": "2026-05-10T12:48:35.886002",
   "fontes": [
     {
       "fonte": "INPE/Queimadas - Focos de Incêndio",
-      "registros": 7472,
+      "registros": 8280,
       "status": "OK",
-      "duracao_segundos": 32.4
+      "duracao_segundos": 3.1
     },
     {
-      "fonte": "INPE/DETER - Desmatamento Cerrado",
-      "registros": 38,
+      "fonte": "INPE/Queimadas - Área Queimada SHP + TIF",
+      "registros": 568,
       "status": "OK",
-      "duracao_segundos": 0.8
-    },
-    {
-      "fonte": "INPE/DETER - Desmatamento Amazônia",
-      "registros": 0,
-      "status": "OK",
-      "duracao_segundos": 2.3
-    },
-    {
-      "fonte": "INPE/PRODES - Desmatamento Anual",
-      "registros": 50000,
-      "status": "OK",
-      "duracao_segundos": 17.2
+      "duracao_segundos": 99.1
     }
   ],
-  "total_geral": 57510,
+  "total_geral": 8848,
   "arquivos_gerados": [
     "unidades_conservacao_sp.json",
+    "inpe_area_queimada_colecao2.json",
     "resumo_coleta.json",
     "palmares_quilombolas_sp.json",
     "deter_desmatamento_sp.json",
