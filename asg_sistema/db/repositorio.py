@@ -201,6 +201,7 @@ def cruzamento_espacial_imovel(geom_geojson: str, municipio: str) -> dict:
                 SELECT ST_SetSRID(ST_GeomFromGeoJSON(:geom), 4674) AS geom
             )
             SELECT q.id, q.municipio, q.satelite, q.data_hora, q.frp, q.bioma,
+                   q.latitude, q.longitude, q.risco_fogo,
                    ST_AsGeoJSON(q.geom) as geometry,
                    ST_Contains(f.geom, q.geom) as dentro,
                    ST_Distance(f.geom::geography, q.geom::geography) / 1000 as distancia_km

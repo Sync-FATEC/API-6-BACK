@@ -49,6 +49,9 @@ packaging==26.0
 pandas==3.0.2
 pgvector==0.4.2
 pillow==12.2.0
+planetary-computer
+pystac-client
+rasterio
 pluggy==1.6.0
 preshed==3.0.13
 psycopg2-binary==2.9.11

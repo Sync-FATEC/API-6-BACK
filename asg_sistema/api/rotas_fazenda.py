@@ -17,7 +17,6 @@ from matplotlib.patches import Patch
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import CSS, HTML
 
 from asg_sistema.db import repositorio
 from asg_sistema.motor.calculadora_risco import calcular_score_ahp
@@ -259,6 +258,8 @@ def _gerar_mapa(geojson_data: dict, output_path: str) -> bool:
 
 
 def _gerar_pdf(car: str, dados: dict, geojson: dict) -> bytes:
+    from weasyprint import CSS, HTML
+    
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
     template = env.get_template("relatorio.html")
 

@@ -117,8 +117,12 @@ class GeradorResposta:
                         "properties": {
                             "texto": f"Foco de queimada detectado a {round(float(item.get('distancia_km') or 0), 2)}km.",
                             "fonte": "queimadas",
+                            "id": item.get("id"),
+                            "latitude": item.get("latitude"),
+                            "longitude": item.get("longitude"),
                             "satelite": item.get("satelite", ""),
                             "data_referencia": str(item.get("data_hora", "")),
+                            "data_hora": str(item.get("data_hora", "")),
                             "frp": item.get("frp"),
                             "bioma": item.get("bioma", ""),
                             "risco_fogo": item.get("risco_fogo", ""),
@@ -707,10 +711,14 @@ class GeradorResposta:
                     "municipio": r.get("municipio", ""),
                     "data_referencia": str(r.get("data_referencia", "") or ""),
                 }
+                # Inclui todos os campos do meta EXCETO os de geometria bruta
+                # (mantém latitude/longitude para o endpoint Sentinel-2)
                 for key, value in meta.items():
-                    if key not in ("geometry", "latitude", "longitude",
-                                   "centroid_lon", "centroid_lat"):
+                    if key not in ("geometry", "centroid_lon", "centroid_lat"):
                         props[key] = value
+                # Garante que id do registro principal está nas props
+                if "id" not in props and r.get("id"):
+                    props["id"] = r["id"]
                 features.append({
                     "type": "Feature",
                     "geometry": geometry,

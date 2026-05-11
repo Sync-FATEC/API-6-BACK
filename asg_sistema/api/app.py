@@ -17,7 +17,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_fazenda, rotas_geo, rotas_pipeline, rotas_dashboard
+from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_fazenda, rotas_geo, rotas_pipeline, rotas_dashboard, rotas_sentinel
 from asg_sistema.db.conexao import SessionLocal, engine
 from asg_sistema.db.models import AgendamentoAtualizacao, Base
 from asg_sistema.routers.agendamento_router import router as agendamento_router
@@ -80,6 +80,7 @@ app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
 app.include_router(rotas_fazenda.router, prefix="/api/fazenda", tags=["Fazenda"])
 app.include_router(rotas_pipeline.router, prefix="/api/etl", tags=["Pipeline ETL"])
 app.include_router(rotas_dashboard.router, prefix="/api", tags=["Dashboard"])
+app.include_router(rotas_sentinel.router, prefix="/api/dados", tags=["Sentinel-2"])
 app.include_router(agendamento_router, prefix="/api/v1")
 
 
