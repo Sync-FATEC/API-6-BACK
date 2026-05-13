@@ -21,6 +21,7 @@ from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_faze
 from asg_sistema.db.conexao import SessionLocal, engine
 from asg_sistema.db.models import AgendamentoAtualizacao, Base
 from asg_sistema.routers.agendamento_router import router as agendamento_router
+from asg_sistema.routers.auth_router import router as auth_router
 from asg_sistema.scheduler.gerenciador import (
     encerrar_scheduler,
     iniciar_scheduler,
@@ -82,6 +83,7 @@ app.include_router(rotas_pipeline.router, prefix="/api/etl", tags=["Pipeline ETL
 app.include_router(rotas_dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(rotas_sentinel.router, prefix="/api/dados", tags=["Sentinel-2"])
 app.include_router(agendamento_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
 
 
 @app.get("/api/saude")

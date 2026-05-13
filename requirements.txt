@@ -53,8 +53,10 @@ planetary-computer
 pystac-client
 rasterio
 pluggy==1.6.0
+passlib[bcrypt]==1.7.4
 preshed==3.0.13
 psycopg2-binary==2.9.11
+python-jose[cryptography]==3.5.0
 pt_core_news_sm @ https://github.com/explosion/spacy-models/releases/download/pt_core_news_sm-3.8.0/pt_core_news_sm-3.8.0-py3-none-any.whl#sha256=c304fa04db3af73cd08a250feacf560506e15a2ec2469bd1b09f06847f6b455c
 pycparser==3.0
 pydantic==2.12.5
@@ -70,6 +72,7 @@ pytesseract==0.3.13
 pytest==9.0.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
+email-validator==2.3.0
 PyYAML==6.0.3
 regex==2026.4.4
 requests==2.33.1

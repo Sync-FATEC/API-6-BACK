@@ -1,0 +1,16 @@
+from datetime import datetime, timedelta, timezone
+
+from jose import jwt
+
+from asg_sistema.config import config
+
+
+def criar_token_acesso(assunto_usuario_id: str) -> str:
+    agora = datetime.now(timezone.utc)
+    expira = agora + timedelta(minutes=config.jwt_expiracao_minutos)
+    payload = {"sub": assunto_usuario_id, "exp": expira}
+    return jwt.encode(payload, config.jwt_segredo, algorithm=config.jwt_algoritmo)
+
+
+def decodificar_token(token: str) -> dict:
+    return jwt.decode(token, config.jwt_segredo, algorithms=[config.jwt_algoritmo])
