@@ -4,7 +4,7 @@ Complementa o schema.sql existente.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, func
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -32,3 +32,13 @@ class AgendamentoAtualizacao(Base):
     ultima_execucao_em = Column(DateTime, nullable=True)
     ultimo_status    = Column(String(20), nullable=True)        # "sucesso" | "erro" | "executando"
     ultima_mensagem  = Column(Text, nullable=True)
+
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    senha_hash = Column(String(255), nullable=False)
+    criado_em = Column(DateTime, server_default=func.now())
+    atualizado_em = Column(DateTime, server_default=func.now(), onupdate=func.now())

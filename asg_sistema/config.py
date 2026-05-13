@@ -5,6 +5,7 @@ Carrega valores do arquivo .env sem necessidade de alterar codigo-fonte.
 from pathlib import Path
 
 from dotenv import load_dotenv
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -32,6 +33,21 @@ class Configuracao(BaseSettings):
     env: str = "development"
     etl_retry_intervalo_segundos: int | None = None
     etl_retry_max_tentativas: int = 3
+
+    jwt_segredo: str
+    jwt_algoritmo: str = "HS256"
+    jwt_expiracao_minutos: int = 60 * 24
+
+    @field_validator("jwt_segredo")
+    @classmethod
+    def jwt_segredo_nao_vazio(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError(
+                "Defina ASG_JWT_SEGREDO no .env (ou variável de ambiente); "
+                "use uma string longa e aleatória, nunca commite o valor real."
+            )
+        return s
 
     class Config:
         env_file = _ENV_FILE

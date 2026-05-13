@@ -195,3 +195,14 @@ CREATE INDEX IF NOT EXISTS idx_corpus_fonte ON corpus_asg(fonte);
 CREATE INDEX IF NOT EXISTS idx_corpus_uf_sigla ON corpus_asg(uf_sigla);
 CREATE INDEX IF NOT EXISTS idx_corpus_municipio ON corpus_asg(municipio);
 CREATE INDEX IF NOT EXISTS idx_corpus_data ON corpus_asg(data_referencia);
+
+-- Usuários da API (autenticação JWT)
+CREATE TABLE IF NOT EXISTS usuarios (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    senha_hash VARCHAR(255) NOT NULL,
+    criado_em TIMESTAMP DEFAULT NOW(),
+    atualizado_em TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email);
