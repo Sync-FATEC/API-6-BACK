@@ -12,19 +12,41 @@ from asg_sistema.schemas.auth import (
     AlterarSenhaRequest,
     CadastroRequest,
     LoginRequest,
+    LoginResponse,
     MensagemResponse,
-    TokenResponse,
+    UsuarioPublico,
 )
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
 
-@router.post("/cadastro", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def _usuario_publico(usuario: Usuario) -> UsuarioPublico:
+    return UsuarioPublico.model_validate(
+        {
+            "nome": usuario.nome,
+            "cargo": usuario.cargo,
+            "email": usuario.email,
+            "papel": usuario.papel,
+        }
+    )
+
+
+@router.post("/cadastro", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def cadastrar(payload: CadastroRequest, db: Session = Depends(obter_sessao)):
-    """Cria usuário e retorna token (útil para desenvolvimento e primeiro acesso)."""
+    """Cria usuário (nome, cargo, e-mail, papel ADMIN ou USER, senha) e retorna token."""
+    if payload.papel == "ADMIN":
+        if db.query(Usuario).count() > 0:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cadastro como ADMIN só é permitido para o primeiro usuário do sistema.",
+            )
+
     usuario = Usuario(
+        nome=payload.nome.strip(),
+        cargo=payload.cargo.strip(),
         email=payload.email.lower().strip(),
         senha_hash=senha_util.hash_senha(payload.senha),
+        papel=payload.papel,
     )
     db.add(usuario)
     try:
@@ -37,12 +59,18 @@ def cadastrar(payload: CadastroRequest, db: Session = Depends(obter_sessao)):
             detail="E-mail já cadastrado.",
         ) from None
 
-    token = jwt_tokens.criar_token_acesso(str(usuario.id))
-    return TokenResponse(access_token=token)
+    token = jwt_tokens.criar_token_acesso(usuario.id, usuario.email, usuario.papel)
+    return LoginResponse(
+        access_token=token,
+        usuario=_usuario_publico(usuario),
+    )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, db: Session = Depends(obter_sessao)):
+    """
+    Valida e-mail e senha, busca o usuário no banco e retorna um JWT (Bearer) com dados públicos.
+    """
     email = payload.email.lower().strip()
     usuario = db.query(Usuario).filter(Usuario.email == email).first()
     if usuario is None or not senha_util.verificar_senha(payload.senha, usuario.senha_hash):
@@ -50,8 +78,11 @@ def login(payload: LoginRequest, db: Session = Depends(obter_sessao)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-mail ou senha incorretos.",
         )
-    token = jwt_tokens.criar_token_acesso(str(usuario.id))
-    return TokenResponse(access_token=token)
+    token = jwt_tokens.criar_token_acesso(usuario.id, usuario.email, usuario.papel)
+    return LoginResponse(
+        access_token=token,
+        usuario=_usuario_publico(usuario),
+    )
 
 
 @router.post("/alterar-senha", response_model=MensagemResponse)

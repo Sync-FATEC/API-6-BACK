@@ -31,6 +31,7 @@ def obter_usuario_atual(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         usuario_id = int(sub)
+        papel_token = payload.get("papel")
     except (JWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -44,5 +45,20 @@ def obter_usuario_atual(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuário não encontrado.",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    if papel_token is not None and papel_token != usuario.papel:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token desatualizado; faça login novamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return usuario
+
+
+def exigir_admin(usuario: Usuario = Depends(obter_usuario_atual)) -> Usuario:
+    if usuario.papel != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso restrito a administradores.",
         )
     return usuario
