@@ -1,6 +1,10 @@
 """Schemas Pydantic para autenticação e alteração de senha."""
 
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field
+
+PapelUsuario = Literal["ADMIN", "USER"]
 
 
 class LoginRequest(BaseModel):
@@ -8,9 +12,17 @@ class LoginRequest(BaseModel):
     senha: str = Field(min_length=1)
 
 
-class TokenResponse(BaseModel):
+class UsuarioPublico(BaseModel):
+    nome: str
+    cargo: str
+    email: str
+    papel: PapelUsuario
+
+
+class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    usuario: UsuarioPublico
 
 
 class AlterarSenhaRequest(BaseModel):
@@ -23,7 +35,10 @@ class MensagemResponse(BaseModel):
 
 
 class CadastroRequest(BaseModel):
-    """Permite criar o primeiro usuário para testes; em produção restrinja ou desative."""
+    """Cadastro de usuário (nome, cargo, e-mail, papel ADMIN ou USER e senha)."""
 
+    nome: str = Field(min_length=1, max_length=255)
+    cargo: str = Field(min_length=1, max_length=200)
     email: EmailStr
     senha: str = Field(min_length=8)
+    papel: PapelUsuario = "USER"

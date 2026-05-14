@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_fazenda, rotas_geo, rotas_pipeline, rotas_dashboard, rotas_sentinel
+from asg_sistema.auth.middleware_autenticacao import MiddlewareAutenticacao
 from asg_sistema.db.conexao import SessionLocal, engine
 from asg_sistema.db.models import AgendamentoAtualizacao, Base
 from asg_sistema.routers.agendamento_router import router as agendamento_router
@@ -67,6 +68,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(MiddlewareAutenticacao)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

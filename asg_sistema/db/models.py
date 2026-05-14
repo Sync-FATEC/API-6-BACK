@@ -4,7 +4,7 @@ Complementa o schema.sql existente.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, func, text
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -38,7 +38,10 @@ class Usuario(Base):
     __tablename__ = "usuarios"
 
     id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(255), nullable=False)
+    cargo = Column(String(200), nullable=False)
     email = Column(String(255), unique=True, nullable=False, index=True)
+    papel = Column(String(20), nullable=False, server_default=text("'USER'"), default="USER")  # ADMIN | USER
     senha_hash = Column(String(255), nullable=False)
     criado_em = Column(DateTime, server_default=func.now())
     atualizado_em = Column(DateTime, server_default=func.now(), onupdate=func.now())
