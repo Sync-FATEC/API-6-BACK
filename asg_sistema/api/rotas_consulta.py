@@ -114,6 +114,10 @@ def _salvar_historico(
         grupos=_serializar(resposta.get("grupos")) if resposta.get("grupos") else None,
         fontes=_serializar(resposta.get("fontes")) if resposta.get("fontes") else None,
     )
+    db.add(dados)
+    db.commit()
+
+    return conversa.id, msg_sistema.id
 
 
 @router.post("/consulta")
