@@ -10,24 +10,6 @@ from asg_sistema.db.models import Usuario
 _esquema_bearer = HTTPBearer(auto_error=False)
 
 
-def obter_usuario_opcional(
-    credenciais: HTTPAuthorizationCredentials | None = Depends(_esquema_bearer),
-    db: Session = Depends(obter_sessao),
-) -> Usuario | None:
-    """Retorna o usuário autenticado ou None se não houver token válido."""
-    if credenciais is None or not credenciais.credentials:
-        return None
-    try:
-        payload = jwt_tokens.decodificar_token(credenciais.credentials)
-        sub = payload.get("sub")
-        if sub is None:
-            return None
-        usuario_id = int(sub)
-        return db.query(Usuario).filter(Usuario.id == usuario_id).first()
-    except (JWTError, ValueError):
-        return None
-
-
 def obter_usuario_atual(
     credenciais: HTTPAuthorizationCredentials | None = Depends(_esquema_bearer),
     db: Session = Depends(obter_sessao),
