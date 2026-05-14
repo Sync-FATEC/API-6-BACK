@@ -11,6 +11,7 @@ from asg_sistema.db.models import Usuario
 from asg_sistema.schemas.auth import (
     AlterarSenhaRequest,
     CadastroRequest,
+    EditarUsuarioRequest,
     LoginRequest,
     LoginResponse,
     MensagemResponse,
@@ -110,3 +111,58 @@ def alterar_senha(
     db.add(usuario)
     db.commit()
     return MensagemResponse(mensagem="Senha alterada com sucesso.")
+
+
+@router.put("/usuarios/{usuario_id}", response_model=UsuarioPublico)
+def editar_usuario(
+    usuario_id: int,
+    payload: EditarUsuarioRequest,
+    db: Session = Depends(obter_sessao),
+    usuario_logado: Usuario = Depends(obter_usuario_atual),
+):
+    """
+    Edita um usuário existente.
+    - ADMIN pode editar qualquer usuário.
+    - USER só pode editar a si mesmo.
+    """
+    usuario_alvo = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if usuario_alvo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        )
+
+    if usuario_logado.papel != "ADMIN" and usuario_logado.id != usuario_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode editar seu próprio perfil.",
+        )
+
+    if payload.nome is not None:
+        usuario_alvo.nome = payload.nome.strip()
+    if payload.cargo is not None:
+        usuario_alvo.cargo = payload.cargo.strip()
+    if payload.email is not None:
+        usuario_alvo.email = payload.email.lower().strip()
+    if payload.papel is not None:
+        if payload.papel == "ADMIN" and usuario_logado.papel != "ADMIN":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Apenas administradores podem definir o papel ADMIN.",
+            )
+        usuario_alvo.papel = payload.papel
+    if payload.nova_senha is not None:
+        usuario_alvo.senha_hash = senha_util.hash_senha(payload.nova_senha)
+
+    db.add(usuario_alvo)
+    try:
+        db.commit()
+        db.refresh(usuario_alvo)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="E-mail já está em uso por outro usuário.",
+        ) from None
+
+    return _usuario_publico(usuario_alvo)

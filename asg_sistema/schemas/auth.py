@@ -42,3 +42,13 @@ class CadastroRequest(BaseModel):
     email: EmailStr
     senha: str = Field(min_length=8)
     papel: PapelUsuario = "USER"
+
+
+class EditarUsuarioRequest(BaseModel):
+    """Edição de usuário (campos opcionais)."""
+
+    nome: str | None = Field(default=None, min_length=1, max_length=255)
+    cargo: str | None = Field(default=None, min_length=1, max_length=200)
+    email: EmailStr | None = Field(default=None)
+    papel: PapelUsuario | None = Field(default=None)
+    nova_senha: str | None = Field(default=None, min_length=8)
