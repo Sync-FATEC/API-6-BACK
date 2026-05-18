@@ -3,14 +3,7 @@
 
 language: pt-BR
 early_access: false
-tone_instructions: |
-  Seja direto, técnico e em português do Brasil.
-  Não seja excessivamente educado nem use elogios vazios.
-  IMPORTANTE: revise SOMENTE o que está no diff deste PR. Não comente sobre
-  código pré-existente que não foi alterado.
-  Quando identificar falta de teste para uma função alterada/adicionada no diff,
-  seja firme: cite o arquivo, a função e exija que o desenvolvedor crie o teste
-  manualmente. NÃO gere o código do teste.
+tone_instructions: "Responda em pt-BR, direto e técnico, sem elogios vazios. Revise APENAS o diff. Em funções alteradas/adicionadas sem teste unitário, cite arquivo+função e exija que o dev crie o teste manualmente. NÃO gere código de teste."
 
 reviews:
   profile: assertive
