@@ -41,8 +41,11 @@ KEYWORDS_INTENCAO = {
     "consultar_prodes": ["prodes"],
     "consultar_imovel_rural": [
         "fazenda", "fazendas", "sítio", "sitio", "chácara", "chacara",
-        "imovel rural", "imóvel rural", "cadastro ambiental", "sicar",
-        "codigo car", "código car", "propriedade rural",
+        "imovel rural", "imóvel rural", "cadastro ambiental", "sicar", "car",
+        "codigo car", "código car", "propriedade rural", "status",
+        "irregularidade", "irregularidades", "conformidade", "licença",
+        "validação", "validacao", "ativo", "inativo", "pendente", "suspenso", "cancelado",
+        "ativa", "ativas", "pendentes", "suspensos", "cancelados",
     ],
 }
 
@@ -86,6 +89,7 @@ class InterpretadorConsulta:
             "municipios": entidades.get("municipios", []),
             "periodo": entidades.get("periodo", {}),
             "cod_imovel": entidades.get("cod_imovel"),
+            "status": entidades.get("status"),  # Status da propriedade (AT, PE, SU, CA)
         }
 
     @staticmethod
@@ -334,8 +338,15 @@ class InterpretadorConsulta:
         municipios = [sub.municipio] if sub.municipio else (entidades_base.get("municipios") or [])
         ordem_desc = sub.intencao == "consultar_maior_risco"
 
-        filtros = ["geom IS NOT NULL", "ind_status = 'AT'"]
+        filtros = ["geom IS NOT NULL"]
         params: dict = {}
+        
+        # Filtro por status (extrai da pergunta ou usa "ativo" como padrão)
+        status_filtro = sub.entidades(entidades_base).get("status") or "AT"
+        status_nome_map = {"AT": "Ativo", "PE": "Pendente", "SU": "Suspenso", "CA": "Cancelado"}
+        filtros.append(f"ind_status = '{status_filtro}'")
+        status_nome = status_nome_map.get(status_filtro, status_filtro)
+        
         if municipios:
             filtros.append("municipio ILIKE :municipio")
             params["municipio"] = f"%{municipios[0]}%"
@@ -373,7 +384,7 @@ class InterpretadorConsulta:
                 "intencao_detectada": sub.intencao,
                 "confianca": round(sub.confianca, 3),
                 "entidades": {"municipios": municipios},
-                "resumo": f"Nenhuma fazenda ativa encontrada{local}.",
+                "resumo": f"Nenhuma fazenda com status {status_nome.lower()} encontrada{local}.",
                 "estatisticas": {},
                 "dados": [],
                 "fontes": [],

@@ -361,7 +361,7 @@ class GeradorResposta:
                 "municipio": mun,
                 "area_ha": area,
                 "ind_status": top.get("status"),
-                "status": status_map.get(top.get("status"), "Ativo"),
+                "status": status_map.get(top.get("status") or "", "Ativo"),
                 "ind_tipo": top.get("tipo", "IRU"),
                 "des_condic": top.get("condicao", "Aguardando"),
                 "mod_fiscal": top.get("mod_fiscal"),
@@ -532,6 +532,12 @@ class GeradorResposta:
 
         cod_car = entidades.get("cod_imovel")
         sufixo_car = f" (imóvel CAR {cod_car})" if cod_car else ""
+        
+        # Mapa de status para nome legível
+        status_map = {"AT": "Ativo", "PE": "Pendente", "SU": "Suspenso", "CA": "Cancelado"}
+        status = entidades.get("status")
+        status_nome = status_map.get(status) if status else None
+        sufixo_status = f" com status {status_nome}" if status_nome else " cadastrados no CAR"
 
         resumos = {
             "consultar_queimadas": f"Foram encontrados {total} registros de focos de queimada{local}.",
@@ -541,7 +547,7 @@ class GeradorResposta:
             "consultar_quilombola": f"Foram encontradas {total} comunidades quilombolas{local}.",
             "consultar_prodes": f"Foram encontrados {total} registros de desmatamento PRODES{local}.",
             "consultar_imovel_rural": (
-                f"Foram encontrados {total} imóveis rurais cadastrados no CAR{local}{sufixo_car}."
+                f"Foram encontrados {total} imóveis rurais {sufixo_status}{local}{sufixo_car}."
             ),
             "resumo_municipal": f"Foram encontrados {total} registros ASG{local}.",
         }

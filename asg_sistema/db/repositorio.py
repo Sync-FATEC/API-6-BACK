@@ -59,6 +59,7 @@ def busca_vetorial(
     data_fim: str | None = None,
     limite: int = 15,
     cod_imovel: str | None = None,
+    status: str | None = None,
 ) -> list[dict]:
     filtros = ["UPPER(TRIM(uf_sigla)) = :uf_sigla"]
     params = {"emb": embedding_str, "limite": limite, "uf_sigla": uf_sigla.upper().strip()}
@@ -86,6 +87,9 @@ def busca_vetorial(
     if cod_imovel and fonte == "sicar":
         filtros.append("LOWER(TRIM(metadados_json->>'cod_imovel')) = LOWER(TRIM(:cod_imovel))")
         params["cod_imovel"] = cod_imovel.strip()
+    if status and fonte == "sicar":
+        filtros.append("metadados_json->>'ind_status' = :status")
+        params["status"] = status.strip()
 
     where = ""
     if filtros:
