@@ -9,6 +9,7 @@ Estratégia:
 """
 
 from asg_sistema.motor.planner import ExecutionPlan
+from asg_sistema.motor.qgis_url import construir_qgis_url
 
 
 _META_KEYS = ("_sub", "_raw_resultados", "_raw_resultados_geo", "_erro")
@@ -26,7 +27,9 @@ def agregar(
 
     # Single sub → volta direto, preservando formato original (sem grupos).
     if len(parciais) == 1:
-        return _limpar_parcial(parciais[0], pergunta, plano)
+        clean = _limpar_parcial(parciais[0], pergunta, plano)
+        _injetar_qgis_url(clean, plano, entidades_base)
+        return clean
 
     # Multi-sub: separa CAR das subconsultas de busca.
     car_parciais = [p for p in parciais if (p.get("_sub") or {}).get("cod_imovel")]
@@ -67,7 +70,40 @@ def agregar(
         if isinstance(exp, dict) and isinstance(exp.get("resumo"), dict):
             exp["resumo"]["texto"] = resumo_comparativo
 
+    _injetar_qgis_url(consolidada, plano, entidades_base)
     return consolidada
+
+
+def _injetar_qgis_url(resposta: dict, plano: ExecutionPlan, entidades_base: dict) -> None:
+    """Anexa `qgis_url` (intencao principal) e `qgis_urls` (uma por subconsulta)."""
+    entidades = dict(entidades_base or {})
+    entidades_resposta = resposta.get("entidades") or {}
+    if isinstance(entidades_resposta, dict):
+        for k, v in entidades_resposta.items():
+            entidades.setdefault(k, v)
+
+    principal = construir_qgis_url(plano.intencao_principal, entidades)
+    if principal:
+        resposta["qgis_url"] = principal
+
+    grupos = resposta.get("grupos") or []
+    urls_grupos: list[dict] = []
+    for g in grupos:
+        filtros = g.get("filtros") or {}
+        intencao = filtros.get("intencao")
+        if not intencao:
+            continue
+        ent_grupo = dict(entidades)
+        if filtros.get("municipio"):
+            ent_grupo["municipios"] = [filtros["municipio"]]
+        if filtros.get("cod_imovel"):
+            ent_grupo["cod_imovel"] = filtros["cod_imovel"]
+        url = construir_qgis_url(intencao, ent_grupo)
+        if url:
+            urls_grupos.append({"rotulo": g.get("rotulo", ""), "url": url})
+            g["qgis_url"] = url
+    if urls_grupos:
+        resposta["qgis_urls"] = urls_grupos
 
 
 def _limpar_parcial(parcial: dict, pergunta: str, plano: ExecutionPlan) -> dict:

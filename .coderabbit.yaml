@@ -1,0 +1,119 @@
+# Configuração do CodeRabbit
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: pt-BR
+early_access: false
+tone_instructions: |
+  Seja direto, técnico e em português do Brasil.
+  Não seja excessivamente educado nem use elogios vazios.
+  IMPORTANTE: revise SOMENTE o que está no diff deste PR. Não comente sobre
+  código pré-existente que não foi alterado.
+  Quando identificar falta de teste para uma função alterada/adicionada no diff,
+  seja firme: cite o arquivo, a função e exija que o desenvolvedor crie o teste
+  manualmente. NÃO gere o código do teste.
+
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+      - develop
+
+  # Instruções por caminho — foco em cobertura de testes unitários
+  path_instructions:
+    - path: "asg_sistema/**/*.py"
+      instructions: |
+        ESCOPO ESTRITO: Revise APENAS as linhas alteradas neste PR (o diff).
+        NÃO comente sobre código pré-existente que não foi modificado.
+        NÃO faça varredura de cobertura no projeto inteiro.
+
+        OBJETIVO: Para cada função/método/classe que foi ADICIONADO ou MODIFICADO
+        no diff deste PR, verificar se há teste unitário correspondente.
+
+        REGRAS DE ESCOPO:
+          - Se a função já existia e NÃO foi tocada no diff → IGNORE, não comente.
+          - Se a função foi adicionada no diff → exija teste.
+          - Se a assinatura, lógica ou comportamento foi alterado no diff → exija
+            teste (novo ou atualizado) cobrindo a mudança.
+          - Renomes, formatação, comentários e imports não exigem teste.
+
+        COMO COMENTAR (somente para o que está no diff):
+          - Comente NA LINHA da função alterada/adicionada.
+          - Aponte o arquivo, a função e o que mudou.
+          - Liste os cenários que o dev deve cobrir (caminho feliz, erros, bordas)
+            considerando APENAS a mudança feita neste PR.
+          - Diga: "Crie manualmente o teste em tests/<caminho>/test_<modulo>.py".
+          - NÃO gere nem sugira o código do teste.
+          - Marque como `request changes` se a função alterada estiver em área
+            crítica (auth, motor, rotas, repositório, services).
+
+        ÁREAS CRÍTICAS (bloquear PR se alteração no diff não tiver teste):
+          - asg_sistema/auth/**
+          - asg_sistema/motor/**
+          - asg_sistema/api/rotas_*.py
+          - asg_sistema/db/repositorio.py
+          - asg_sistema/services/**
+
+    - path: "asg_sistema/auth/**/*.py"
+      instructions: |
+        Aplique APENAS às linhas do diff. Se a mudança no PR tocar geração/validação
+        de JWT, hash/verificação de senha, middleware ou dependências de
+        autorização, exija teste para a alteração feita. Ignore funções não
+        tocadas pelo diff.
+
+    - path: "asg_sistema/motor/**/*.py"
+      instructions: |
+        Aplique APENAS às linhas do diff. Se a mudança no PR alterar regra de
+        negócio (AHP, risco, planner, interpretador, agregador), exija teste
+        cobrindo a alteração. Ignore funções não tocadas pelo diff.
+
+    - path: "asg_sistema/api/rotas_*.py"
+      instructions: |
+        Aplique APENAS às linhas do diff. Para rotas adicionadas ou alteradas
+        no diff, exija teste cobrindo status codes, payload, validação e
+        autorização da mudança. Ignore rotas não tocadas pelo diff.
+
+    - path: "tests/**/*.py"
+      instructions: |
+        Revise se os testes:
+          - Cobrem casos de erro e edge cases, não só o caminho feliz.
+          - Usam mocks/fixtures adequadamente (sem mockar o que está sendo testado).
+          - Têm asserts significativos (não apenas `assert result is not None`).
+          - Nomes descritivos no padrão `test_<funcao>_<cenario>_<resultado>`.
+
+  # Habilita ferramentas auxiliares que ajudam a detectar problemas
+  tools:
+    ruff:
+      enabled: true
+    bandit:
+      enabled: true
+    semgrep:
+      enabled: true
+    github-checks:
+      enabled: true
+
+  # Não revisar dependências e arquivos gerados
+  path_filters:
+    - "!.venv/**"
+    - "!**/__pycache__/**"
+    - "!**/*.pyc"
+    - "!**/migrations/**"
+    - "!**/*.lock"
+    - "!**/*.min.js"
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
