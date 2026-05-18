@@ -1,24 +1,59 @@
 {
   "titulo": "Coleta de Dados ASG - Estado de São Paulo",
-  "data_execucao": "2026-05-10T12:48:35.886002",
+  "data_execucao": "2026-05-18T15:53:19.880329",
   "fontes": [
     {
-      "fonte": "INPE/Queimadas - Focos de Incêndio",
-      "registros": 8280,
+      "fonte": "FUNAI - Terras Indígenas",
+      "registros": 29,
       "status": "OK",
-      "duracao_segundos": 3.1
+      "duracao_segundos": 0.5
     },
     {
-      "fonte": "INPE/Queimadas - Área Queimada SHP + TIF",
-      "registros": 568,
+      "fonte": "INPE/DETER - Desmatamento Cerrado",
+      "registros": 36,
       "status": "OK",
-      "duracao_segundos": 99.1
+      "duracao_segundos": 0.5
+    },
+    {
+      "fonte": "INPE/DETER - Desmatamento Amazônia",
+      "registros": 0,
+      "status": "OK",
+      "duracao_segundos": 1.7
+    },
+    {
+      "fonte": "INPE/PRODES - Desmatamento Anual",
+      "registros": 50000,
+      "status": "OK",
+      "duracao_segundos": 14.1
+    },
+    {
+      "fonte": "INPE/Queimadas - Focos de Incêndio",
+      "registros": 8523,
+      "status": "OK",
+      "duracao_segundos": 31.0
+    },
+    {
+      "fonte": "MMA/ICMBio - Unidades de Conservação",
+      "registros": 42,
+      "status": "OK",
+      "duracao_segundos": 39.0
+    },
+    {
+      "fonte": "SICAR - Cadastro Ambiental Rural",
+      "registros": 0,
+      "status": "OK",
+      "duracao_segundos": 0.1
+    },
+    {
+      "fonte": "Palmares - Comunidades Quilombolas",
+      "registros": 52,
+      "status": "OK",
+      "duracao_segundos": 1.0
     }
   ],
-  "total_geral": 8848,
+  "total_geral": 58682,
   "arquivos_gerados": [
     "unidades_conservacao_sp.json",
-    "inpe_area_queimada_colecao2.json",
     "resumo_coleta.json",
     "palmares_quilombolas_sp.json",
     "deter_desmatamento_sp.json",
