@@ -33,7 +33,10 @@ class ExtratorEntidades:
     def extrair(self, texto: str) -> dict:
         municipios = self._extrair_municipios(texto)
         periodo = self._extrair_periodo(texto)
+        status = self._extrair_status(texto)
         out: dict = {"municipios": municipios, "periodo": periodo}
+        if status:
+            out["status"] = status
         # Extração do outro dev (cod_imovel único)
         cod = extrair_cod_imovel_do_texto(texto)
         if cod:
@@ -87,6 +90,20 @@ class ExtratorEntidades:
             }
 
         return {}
+
+    def _extrair_status(self, texto: str) -> str | None:
+        """Extrai status da propriedade (ativo, pendente, suspenso, cancelado)."""
+        texto_lower = texto.lower()
+        status_map = {
+            r"\b(?:ativo|ativas)\b": "AT",
+            r"\b(?:pendente|pendentes)\b": "PE",
+            r"\b(?:suspenso|suspensos|suspensa|suspensas)\b": "SU",
+            r"\b(?:cancelado|cancelados|cancelada|canceladas)\b": "CA",
+        }
+        for padrao, codigo in status_map.items():
+            if re.search(padrao, texto_lower):
+                return codigo
+        return None
 
 
 def _remover_acentos(texto: str) -> str:
