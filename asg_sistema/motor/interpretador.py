@@ -374,7 +374,7 @@ class InterpretadorConsulta:
                 FROM sicar_imoveis
                 {where}
                 ORDER BY {sql_order}
-                LIMIT 30""",
+                LIMIT 500""",
             params,
         )
 

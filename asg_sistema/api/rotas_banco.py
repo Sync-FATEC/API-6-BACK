@@ -4,9 +4,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from asg_sistema.auth.deps import exigir_admin
+from asg_sistema.db.models import Usuario
 from asg_sistema.db.schema_setup import aplicar_schema
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -27,9 +29,10 @@ def atualizar_base_dados(
     aplicar_ddl: bool = True,
     disparar_pipeline: bool = False,
     etapa: str = "full",
+    usuario_admin: Usuario = Depends(exigir_admin),
 ):
     """
-    Atualiza o banco de dados.
+    Atualiza o banco de dados. Requer autenticação como ADMIN.
 
     - Com `aplicar_ddl=true` (padrão), reaplica `schema.sql` (idempotente).
     - Com `disparar_pipeline=true`, inicia `scripts/etl_pipeline.py` em segundo plano

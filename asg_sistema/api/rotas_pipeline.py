@@ -10,14 +10,16 @@ import uuid
 from pathlib import Path
 import time
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from asg_sistema.api.etl_cooldown import (
     assegurar_cooldown_disparo_etl_api,
     registrar_disparo_etl_api
 )
+from asg_sistema.auth.deps import exigir_admin
 from asg_sistema.db import repositorio
+from asg_sistema.db.models import Usuario
 
 router = APIRouter()
 
@@ -176,9 +178,10 @@ def executar_etl_api(
     background_tasks: BackgroundTasks, 
     etapa: EtapaETL = Query(default=EtapaETL.full, description="Escolha a etapa do pipeline"),
     entidades: list[EntidadeETL] = Query(default=[EntidadeETL.tudo], description="Escolha as entidades para processar"),
-    skip_sicar: bool = Query(default=False, description="Skip SICAR collection")
+    skip_sicar: bool = Query(default=False, description="Skip SICAR collection"),
+    usuario_admin: Usuario = Depends(exigir_admin),
 ):
-    """Dispara execução do pipeline ETL via API."""
+    """Dispara execução do pipeline ETL via API. Requer autenticação como ADMIN."""
     global pipeline_status
 
     if pipeline_status["rodando"]:
