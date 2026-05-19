@@ -286,23 +286,37 @@ class GeradorResposta:
         top = resultados[0]
         nota = top["nota_risco"]["nota"]
         nivel = top["nota_risco"]["nivel"]
+        
+        # Filtrar todos os imóveis com a mesma nota (menor ou maior risco)
+        imoveis_mesma_nota = [
+            r for r in resultados 
+            if r["nota_risco"]["nota"] == nota
+        ]
+        
         cod = top["cod_imovel"]
         mun = top["municipio"]
         area = top["area_ha"]
-        cruzamento = top.get("cruzamento")
+        cruzamento = top.get("cruzamento", {})
 
-        ameacas, resumo_ameacas = ([], "")
-        if cruzamento:
-            ameacas, resumo_ameacas = self._extrair_ameacas_e_resumo(cruzamento)
+        ameacas, resumo_ameacas = self._extrair_ameacas_e_resumo(cruzamento)
 
         status_map = {"AT": "Ativo", "PE": "Pendente", "SU": "Suspenso", "CA": "Cancelado"}
 
         fatores = top["nota_risco"].get("fatores", [])
         fatores_txt = f" Fatores: {'; '.join(fatores)}." if fatores else ""
-        resumo = (
-            f"A fazenda com {tipo} risco socioambiental{local} é o imóvel {cod} "
-            f"({area} ha, {mun}), com nota {nota}/100 — nível {nivel}."
-        )
+        
+        # Montar resumo com pluralidade se há múltiplos imóveis
+        if len(imoveis_mesma_nota) > 1:
+            resumo = (
+                f"Foram encontrados {len(imoveis_mesma_nota)} imóveis com {tipo} risco socioambiental{local}, "
+                f"com nota {nota}/100 — nível {nivel}."
+            )
+        else:
+            resumo = (
+                f"A fazenda com {tipo} risco socioambiental{local} é o imóvel {cod} "
+                f"({area} ha, {mun}), com nota {nota}/100 — nível {nivel}."
+            )
+        
         if resumo_ameacas:
             resumo += f" Detalhes ambientais: {resumo_ameacas}."
         elif fatores_txt:
@@ -310,25 +324,86 @@ class GeradorResposta:
         else:
             resumo += " Nenhum problema ambiental crítico detectado."
 
+        # Gerar features para TODOS os imóveis com a mesma nota
         features = []
-        if top.get("geometry"):
-            features.append({
-                "type": "Feature",
-                "geometry": top["geometry"],
-                "properties": {
-                    "texto": f"Imóvel {cod} — {tipo} risco: nota {nota} ({nivel})",
-                    "fonte": "sicar",
-                    "cod_imovel": cod,
-                    "municipio": mun,
-                    "num_area": area,
-                    "nota_risco": nota,
-                    "nivel_risco": nivel,
-                },
-            })
+        for imovel in imoveis_mesma_nota:
+            if imovel.get("geometry"):
+                cod_aux = imovel["cod_imovel"]
+                mun_aux = imovel["municipio"]
+                area_aux = imovel["area_ha"]
+                nota_aux = imovel["nota_risco"]["nota"]
+                nivel_aux = imovel["nota_risco"]["nivel"]
+                status_aux = imovel.get("status", "")
+                tipo_aux = imovel.get("tipo", "IRU")
+                condicao_aux = imovel.get("condicao", "")
+                
+                features.append({
+                    "type": "Feature",
+                    "geometry": imovel["geometry"],
+                    "properties": {
+                        "texto": f"Imóvel {cod_aux} — {tipo} risco: nota {nota_aux} ({nivel_aux})",
+                        "fonte": "sicar",
+                        "cod_imovel": cod_aux,
+                        "municipio": mun_aux,
+                        "num_area": area_aux,
+                        "nota_risco": nota_aux,
+                        "nivel_risco": nivel_aux,
+                        "ind_status": status_aux,
+                        "ind_tipo": tipo_aux,
+                        "des_condic": condicao_aux,
+                        "mod_fiscal": imovel.get("mod_fiscal", ""),
+                    },
+                })
+            
+            # Adicionar features das ameaças para o mapa exibir os riscos
+            cruzamento_aux = imovel.get("cruzamento", {})
+            
+            # Queimadas
+            q = cruzamento_aux.get("queimadas", {})
+            for item in q.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Foco de queimada detectado",
+                            "fonte": "queimadas",
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
+
+            # DETER
+            d = cruzamento_aux.get("deter", {})
+            for item in d.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Alerta DETER",
+                            "fonte": "deter",
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
+
+            # PRODES
+            p = cruzamento_aux.get("prodes", {})
+            for item in p.get("geo", []):
+                if item.get("geometry"):
+                    features.append({
+                        "type": "Feature",
+                        "geometry": item["geometry"],
+                        "properties": {
+                            "texto": f"Polígono PRODES",
+                            "fonte": "prodes",
+                            "distancia_km": round(float(item.get("distancia_km") or 0), 2),
+                        },
+                    })
 
         geojson = {"type": "FeatureCollection", "features": features} if features else None
         total_final = len(features) if features else 0
 
+        # Incluir todos os imóveis com a mesma nota no ranking
         ranking_resumido = [
             {
                 "posicao": i + 1,
@@ -340,10 +415,16 @@ class GeradorResposta:
                 "nivel": r["nota_risco"]["nivel"],
                 "fatores": r["nota_risco"].get("fatores", []),
             }
-            for i, r in enumerate(resultados[:5])
+            for i, r in enumerate(imoveis_mesma_nota)
         ]
 
         fontes = [{"nome": "SICAR/CAR", "identificador": "sicar"}]
+        
+        # Manter o primeiro imóvel como principal para compatibilidade
+        cod = top["cod_imovel"]
+        mun = top["municipio"]
+        area = top["area_ha"]
+        
         return {
             "intencao_detectada": intencao,
             "confianca": 0.9,
@@ -357,14 +438,17 @@ class GeradorResposta:
             "nota_risco": top["nota_risco"],
             "imovel": {
                 "cod_imovel": cod,
-                "nom_tema": top.get("nom_tema"),
+                "nom_tema": top.get("nom_tema", ""),
                 "municipio": mun,
                 "area_ha": area,
-                "ind_status": top.get("status"),
+                "ind_status": top.get("status", "AT"),
                 "status": status_map.get(top.get("status") or "", "Ativo"),
                 "ind_tipo": top.get("tipo", "IRU"),
                 "des_condic": top.get("condicao", "Aguardando"),
-                "mod_fiscal": top.get("mod_fiscal"),
+                "mod_fiscal": top.get("mod_fiscal", ""),
+                "nota_risco_valor": nota,
+                "nota_risco_nivel": nivel,
+                "geometry": top.get("geometry"),
             },
             "ameacas_encontradas": ameacas,
             "ranking_risco": ranking_resumido,
@@ -554,11 +638,11 @@ class GeradorResposta:
         return resumos.get(intencao, f"Foram encontrados {total} resultados{local}.")
 
     def _calcular_estatisticas(self, intencao: str, resultados: list[dict],
-                               total_geo: int = 0) -> dict:
+                               total_geo: int = 0) -> dict[str, int | float]:
         if not resultados and total_geo == 0:
             return {}
 
-        stats = {"total": total_geo}
+        stats: dict[str, int | float] = {"total": total_geo}
 
         if intencao == "consultar_queimadas":
             frps = []
@@ -906,9 +990,13 @@ class GeradorResposta:
         )
 
     def _limites_geometria(self, coords) -> tuple[float, float, float, float] | None:
-        limites = {"min_lon": None, "min_lat": None, "max_lon": None, "max_lat": None}
+        min_lon: float | None = None
+        min_lat: float | None = None
+        max_lon: float | None = None
+        max_lat: float | None = None
 
         def _varrer(nodo):
+            nonlocal min_lon, min_lat, max_lon, max_lat
             if not isinstance(nodo, list) or not nodo:
                 return
 
@@ -918,10 +1006,10 @@ class GeradorResposta:
                     return
                 lon = float(nodo[0])
                 lat = float(nodo[1])
-                limites["min_lon"] = lon if limites["min_lon"] is None else min(limites["min_lon"], lon)
-                limites["max_lon"] = lon if limites["max_lon"] is None else max(limites["max_lon"], lon)
-                limites["min_lat"] = lat if limites["min_lat"] is None else min(limites["min_lat"], lat)
-                limites["max_lat"] = lat if limites["max_lat"] is None else max(limites["max_lat"], lat)
+                min_lon = lon if min_lon is None else min(min_lon, lon)
+                max_lon = lon if max_lon is None else max(max_lon, lon)
+                min_lat = lat if min_lat is None else min(min_lat, lat)
+                max_lat = lat if max_lat is None else max(max_lat, lat)
                 return
 
             for item in nodo:
@@ -929,13 +1017,13 @@ class GeradorResposta:
 
         _varrer(coords)
 
-        if limites["min_lon"] is None:
+        if min_lon is None:
             return None
         return (
-            limites["min_lon"],
-            limites["min_lat"],
-            limites["max_lon"],
-            limites["max_lat"],
+            min_lon,
+            min_lat if min_lat is not None else 0.0,
+            max_lon if max_lon is not None else 0.0,
+            max_lat if max_lat is not None else 0.0,
         )
 
     def _parse_metadados(self, registro: dict) -> dict:

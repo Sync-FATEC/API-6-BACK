@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from asg_sistema.auth.deps import obter_usuario_atual
+from asg_sistema.auth.deps import obter_usuario_atual, exigir_admin
 from asg_sistema.auth import jwt_tokens, senha as senha_util
 from asg_sistema.db.conexao import obter_sessao
 from asg_sistema.db.models import Usuario
@@ -166,3 +166,16 @@ def editar_usuario(
         ) from None
 
     return _usuario_publico(usuario_alvo)
+
+
+@router.get("/usuarios", response_model=list[UsuarioPublico])
+def listar_usuarios(
+    db: Session = Depends(obter_sessao),
+    usuario_admin: Usuario = Depends(exigir_admin),
+):
+    """
+    Lista todos os usuários do sistema.
+    - Requer autenticação como ADMIN.
+    """
+    usuarios = db.query(Usuario).order_by(Usuario.id).all()
+    return [_usuario_publico(u) for u in usuarios]
