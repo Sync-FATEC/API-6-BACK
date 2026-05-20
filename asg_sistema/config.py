@@ -75,7 +75,7 @@ class Configuracao(BaseSettings):
 
     @property
     def etl_api_cooldown_segundos(self) -> int:
-        return 3600 if self.env == "production" else 5
+        return 5 if self.env == "production" else 5
 
     @property
     def etl_retry_intervalo_erro_api_segundos(self) -> int:
