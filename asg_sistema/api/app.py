@@ -38,10 +38,6 @@ pipeline_status = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Pré-carregando modelo NLP...")
-    rotas_consulta.obter_interpretador()
-    logger.info("Modelo NLP pronto. Primeira requisição será rápida.")
-
     Base.metadata.create_all(bind=engine)
     iniciar_scheduler()
 
@@ -59,7 +55,6 @@ async def lifespan(app: FastAPI):
 
     yield
     encerrar_scheduler()
-
 
 app = FastAPI(
     title="ASG SP - Análise Ambiental, Social e Governança",

@@ -3,7 +3,7 @@ name: Deploy ECS
 on:
   push:
     branches:
-      - dev
+      - SCRUM-107-Ajustes-deploy-app
 
 jobs:
   deploy:
