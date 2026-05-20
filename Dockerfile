@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxcb1 \
     libglib2.0-0 \
     libgl1 \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -35,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxcb1 \
     libglib2.0-0 \
     libgl1 \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /root/.local /root/.local
