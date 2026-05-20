@@ -70,7 +70,7 @@ def _salvar_historico(
     conversa_id: int | None,
     pergunta: str,
     resposta: dict,
-) -> tuple[int, int]:
+) -> tuple[int, int, datetime, datetime]:
     if conversa_id is not None:
         conversa = (
             db.query(Conversa)
@@ -116,8 +116,10 @@ def _salvar_historico(
     )
     db.add(dados)
     db.commit()
+    db.refresh(msg_usuario)
+    db.refresh(msg_sistema)
 
-    return conversa.id, msg_sistema.id
+    return conversa.id, msg_sistema.id, msg_usuario.criado_em, msg_sistema.criado_em
 
 
 @router.post("/consulta")
@@ -134,11 +136,13 @@ def consultar(
         )
 
     try:
+        enviada_em = datetime.utcnow()
         interpretador = obter_interpretador()
         resposta = interpretador.processar(req.pergunta, cod_imovel=req.cod_imovel)
+        recebida_em = datetime.utcnow()
 
         if usuario is not None:
-            conversa_id, mensagem_id = _salvar_historico(
+            conversa_id, mensagem_id, enviada_em, recebida_em = _salvar_historico(
                 db=db,
                 usuario_id=usuario.id,
                 conversa_id=req.conversa_id,
@@ -147,6 +151,9 @@ def consultar(
             )
             resposta["conversa_id"] = conversa_id
             resposta["mensagem_id"] = mensagem_id
+
+        resposta["mensagem_enviada_em"] = enviada_em.isoformat()
+        resposta["mensagem_recebida_em"] = recebida_em.isoformat()
 
         return JSONResponse(
             content=json.loads(json.dumps(resposta, ensure_ascii=False, default=str)),
