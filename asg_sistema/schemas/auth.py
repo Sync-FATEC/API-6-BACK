@@ -13,6 +13,7 @@ class LoginRequest(BaseModel):
 
 
 class UsuarioPublico(BaseModel):
+    id: int
     nome: str
     cargo: str
     email: str

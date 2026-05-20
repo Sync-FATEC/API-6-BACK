@@ -24,6 +24,7 @@ router = APIRouter(prefix="/auth", tags=["Autenticação"])
 def _usuario_publico(usuario: Usuario) -> UsuarioPublico:
     return UsuarioPublico.model_validate(
         {
+            "id": usuario.id,
             "nome": usuario.nome,
             "cargo": usuario.cargo,
             "email": usuario.email,
@@ -31,16 +32,13 @@ def _usuario_publico(usuario: Usuario) -> UsuarioPublico:
         }
     )
 
-
 @router.post("/cadastro", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
-def cadastrar(payload: CadastroRequest, db: Session = Depends(obter_sessao)):
-    """Cria usuário (nome, cargo, e-mail, papel ADMIN ou USER, senha) e retorna token."""
-    if payload.papel == "ADMIN":
-        if db.query(Usuario).count() > 0:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cadastro como ADMIN só é permitido para o primeiro usuário do sistema.",
-            )
+def cadastrar(
+    payload: CadastroRequest,
+    db: Session = Depends(obter_sessao),
+    usuario_admin: Usuario = Depends(exigir_admin),
+):
+    """Cria usuário ADMIN ou USER. Requer usuário ADMIN autenticado."""
 
     usuario = Usuario(
         nome=payload.nome.strip(),
@@ -49,7 +47,9 @@ def cadastrar(payload: CadastroRequest, db: Session = Depends(obter_sessao)):
         senha_hash=senha_util.hash_senha(payload.senha),
         papel=payload.papel,
     )
+
     db.add(usuario)
+
     try:
         db.commit()
         db.refresh(usuario)
@@ -61,11 +61,11 @@ def cadastrar(payload: CadastroRequest, db: Session = Depends(obter_sessao)):
         ) from None
 
     token = jwt_tokens.criar_token_acesso(usuario.id, usuario.email, usuario.papel)
+
     return LoginResponse(
         access_token=token,
         usuario=_usuario_publico(usuario),
     )
-
 
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, db: Session = Depends(obter_sessao)):
@@ -179,3 +179,35 @@ def listar_usuarios(
     """
     usuarios = db.query(Usuario).order_by(Usuario.id).all()
     return [_usuario_publico(u) for u in usuarios]
+
+
+@router.delete("/usuarios/{usuario_id}", response_model=MensagemResponse)
+def excluir_usuario(
+    usuario_id: int,
+    db: Session = Depends(obter_sessao),
+    usuario_admin: Usuario = Depends(exigir_admin),
+):
+    """
+    Exclui um usuário do sistema.
+    - Requer autenticação como ADMIN.
+    - O ADMIN não pode excluir a si mesmo.
+    """
+
+    if usuario_admin.id == usuario_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Você não pode excluir seu próprio usuário.",
+        )
+
+    usuario_alvo = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+
+    if usuario_alvo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        )
+
+    db.delete(usuario_alvo)
+    db.commit()
+
+    return MensagemResponse(mensagem="Usuário excluído com sucesso.")
