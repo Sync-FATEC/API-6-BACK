@@ -1,0 +1,60 @@
+{
+  "family": "asg-backend-task",
+  "executionRoleArn": "arn:aws:iam::393594587476:role/ecsTaskExecutionRole",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "containerDefinitions": [
+    {
+      "name": "asg-backend",
+      "image": "393594587476.dkr.ecr.us-east-1.amazonaws.com/asg-backend:latest",
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "ASG_ENV",
+          "value": "production"
+        },
+        {
+          "name": "ASG_DB_HOST",
+          "value": "asg-sp.cex6kmsqozua.us-east-1.rds.amazonaws.com"
+        },
+        {
+          "name": "ASG_DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "ASG_DB_NOME",
+          "value": "asg_sp"
+        },
+        {
+          "name": "ASG_DB_USUARIO",
+          "value": "asg_user"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "ASG_DB_SENHA",
+          "valueFrom": "arn:aws:ssm:us-east-1:393594587476:parameter/asg/prod/db-password"
+        },
+        {
+          "name": "ASG_JWT_SEGREDO",
+          "valueFrom": "arn:aws:ssm:us-east-1:393594587476:parameter/asg/prod/jwt-secret"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/asg-backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
