@@ -83,7 +83,7 @@ class Configuracao(BaseSettings):
         if self.etl_retry_intervalo_segundos is not None:
             return self.etl_retry_intervalo_segundos
         # Em produção mantém 1 hora; em dev/testes reduz para 2 minutos.
-        return 3600 if self.env == "production" else 120
+        return 5 if self.env == "production" else 5
 
 
 config = Configuracao()
