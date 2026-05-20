@@ -1,11 +1,10 @@
 """Testes unitarios para a injecao de qgis_url no agregador.
 
 Regras de negocio cobertas:
-1. Resposta com 1 sub-consulta -> qgis_url da intencao principal.
-2. Resposta multi-grupo -> qgis_url principal + qgis_urls (uma por grupo).
-3. Cada grupo tambem ganha qgis_url no proprio objeto.
-4. Intencao sem mapeamento -> nem qgis_url nem qgis_urls aparecem.
-5. Filtros do grupo (municipio/cod_imovel) sobrescrevem entidades base.
+1. Resposta com 1 sub-consulta -> qgis_url aponta para /api/geo/consulta com a pergunta.
+2. Resposta multi-grupo -> qgis_url unica aponta para /api/geo/consulta (mesmo geojson).
+3. Pergunta vazia -> nao injeta qgis_url.
+4. cod_imovel nas entidades vira parametro adicional na qgis_url.
 """
 
 from urllib.parse import parse_qs, urlsplit
@@ -78,8 +77,9 @@ class GeradorFalso:
         }
 
 
-def _parse_qs(url: str) -> dict[str, list[str]]:
-    return parse_qs(urlsplit(url).query)
+def _parse(url: str) -> tuple[str, dict[str, list[str]]]:
+    parts = urlsplit(url)
+    return parts.path, parse_qs(parts.query)
 
 
 # --------------------------------------------------------------------------
@@ -87,30 +87,32 @@ def _parse_qs(url: str) -> dict[str, list[str]]:
 # --------------------------------------------------------------------------
 
 class TestRespostaUnica:
-    def test_deve_injetar_qgis_url_principal_quando_uma_unica_subconsulta(self):
+    def test_deve_injetar_qgis_url_apontando_para_endpoint_de_consulta(self):
         # Arrange
         plano = um_plano(intencao_principal="consultar_queimadas")
-        entidades = {"municipios": ["Ubatuba"]}
         parciais = [uma_parcial(intencao="consultar_queimadas")]
 
         # Act
-        resposta = agregar("queimadas em ubatuba", plano, entidades, parciais, GeradorFalso())
+        resposta = agregar("queimadas em ubatuba", plano, {}, parciais, GeradorFalso())
 
         # Assert
         assert "qgis_url" in resposta
-        assert resposta["qgis_url"].startswith("/api/geo/queimadas")
-        assert _parse_qs(resposta["qgis_url"])["municipio"] == ["Ubatuba"]
+        path, query = _parse(resposta["qgis_url"])
+        assert path == "/api/geo/consulta"
+        assert query["pergunta"] == ["queimadas em ubatuba"]
 
-    def test_deve_omitir_qgis_url_quando_intencao_nao_tem_endpoint_geo(self):
+    def test_deve_passar_cod_imovel_quando_presente_nas_entidades(self):
         # Arrange
-        plano = um_plano(intencao_principal="resumo_municipal")
-        parciais = [uma_parcial(intencao="resumo_municipal")]
+        plano = um_plano(intencao_principal="consultar_imovel_rural")
+        parciais = [uma_parcial(intencao="consultar_imovel_rural")]
+        entidades = {"cod_imovel": "SP-3555406-ABC"}
 
         # Act
-        resposta = agregar("resumo de campinas", plano, {}, parciais, GeradorFalso())
+        resposta = agregar("ameacas no SP-3555406-ABC", plano, entidades, parciais, GeradorFalso())
 
         # Assert
-        assert "qgis_url" not in resposta
+        _, query = _parse(resposta["qgis_url"])
+        assert query["cod_imovel"] == ["SP-3555406-ABC"]
 
     def test_deve_nao_ter_qgis_urls_em_resposta_de_sub_unica(self):
         # Arrange
@@ -120,7 +122,7 @@ class TestRespostaUnica:
         # Act
         resposta = agregar("q", plano, {}, parciais, GeradorFalso())
 
-        # Assert
+        # Assert — nao expomos mais qgis_urls, apenas o unico campo qgis_url
         assert "qgis_urls" not in resposta
 
 
@@ -129,42 +131,7 @@ class TestRespostaUnica:
 # --------------------------------------------------------------------------
 
 class TestRespostaMultiGrupo:
-    def test_deve_injetar_qgis_urls_quando_resposta_tem_multiplos_grupos(self):
-        # Arrange
-        plano = um_plano(intencao_principal="consultar_queimadas", eixo_agrupamento="municipio")
-        entidades = {}
-        parciais = [
-            uma_parcial(intencao="consultar_queimadas", municipio="Campinas", rotulo="Campinas"),
-            uma_parcial(intencao="consultar_queimadas", municipio="Sorocaba", rotulo="Sorocaba"),
-        ]
-
-        # Act
-        resposta = agregar("queimadas em campinas e sorocaba", plano, entidades, parciais, GeradorFalso())
-
-        # Assert
-        assert isinstance(resposta.get("qgis_urls"), list)
-        assert len(resposta["qgis_urls"]) == 2
-        rotulos = [u["rotulo"] for u in resposta["qgis_urls"]]
-        assert "Campinas" in rotulos and "Sorocaba" in rotulos
-
-    def test_deve_usar_municipio_do_grupo_quando_diferente_das_entidades_base(self):
-        # Arrange
-        plano = um_plano(intencao_principal="consultar_queimadas", eixo_agrupamento="municipio")
-        entidades = {"municipios": ["EntidadeBase"]}
-        parciais = [
-            uma_parcial(intencao="consultar_queimadas", municipio="Campinas", rotulo="Campinas"),
-            uma_parcial(intencao="consultar_queimadas", municipio="Sorocaba", rotulo="Sorocaba"),
-        ]
-
-        # Act
-        resposta = agregar("q", plano, entidades, parciais, GeradorFalso())
-
-        # Assert
-        urls = {u["rotulo"]: u["url"] for u in resposta["qgis_urls"]}
-        assert _parse_qs(urls["Campinas"])["municipio"] == ["Campinas"]
-        assert _parse_qs(urls["Sorocaba"])["municipio"] == ["Sorocaba"]
-
-    def test_deve_anexar_qgis_url_no_proprio_objeto_de_cada_grupo(self):
+    def test_deve_injetar_unica_qgis_url_quando_resposta_tem_multiplos_grupos(self):
         # Arrange
         plano = um_plano(intencao_principal="consultar_queimadas", eixo_agrupamento="municipio")
         parciais = [
@@ -173,28 +140,89 @@ class TestRespostaMultiGrupo:
         ]
 
         # Act
-        resposta = agregar("q", plano, {}, parciais, GeradorFalso())
+        resposta = agregar(
+            "queimadas em campinas e sorocaba", plano, {}, parciais, GeradorFalso(),
+        )
 
-        # Assert
-        grupos = resposta.get("grupos") or []
-        assert len(grupos) == 2
-        for g in grupos:
-            assert "qgis_url" in g
-            assert g["qgis_url"].startswith("/api/geo/queimadas")
+        # Assert — a URL unica encapsula multi-grupo via /api/geo/consulta
+        assert "qgis_url" in resposta
+        path, query = _parse(resposta["qgis_url"])
+        assert path == "/api/geo/consulta"
+        assert query["pergunta"] == ["queimadas em campinas e sorocaba"]
 
-    def test_deve_ignorar_grupo_cuja_intencao_nao_tem_endpoint_geo(self):
-        # Arrange — um grupo com intencao mapeada, outro sem
-        plano = um_plano(intencao_principal="consultar_queimadas", eixo_agrupamento="intencao")
-        parciais = [
-            uma_parcial(intencao="consultar_queimadas", municipio="Campinas", rotulo="Queimadas"),
-            uma_parcial(intencao="resumo_municipal", municipio="Campinas", rotulo="Resumo"),
+
+# --------------------------------------------------------------------------
+# Casos negativos
+# --------------------------------------------------------------------------
+
+class TestFiltroZerosResumoMunicipal:
+    def test_deve_remover_grupos_sem_resultados_quando_intencao_principal_e_resumo_municipal(self):
+        plano = um_plano(
+            intencao_principal="resumo_municipal", eixo_agrupamento="intencao",
+        )
+        com_dados = uma_parcial(intencao="consultar_queimadas", rotulo="queimadas")
+        com_dados["total_resultados"] = 37
+        sem_dados = uma_parcial(intencao="consultar_quilombola", rotulo="quilombolas")
+        sem_dados["total_resultados"] = 0
+
+        resposta = agregar(
+            "situação de caçapava", plano, {}, [com_dados, sem_dados], GeradorFalso(),
+        )
+
+        rotulos = [g["rotulo"] for g in resposta["grupos"]]
+        assert rotulos == ["queimadas"]
+
+    def test_deve_filtrar_intencoes_detectadas_para_apenas_temas_com_dados(self):
+        plano = um_plano(
+            intencao_principal="resumo_municipal", eixo_agrupamento="intencao",
+        )
+        plano.intencoes_detectadas = [
+            {"intencao": "consultar_queimadas", "confianca": 0.9},
+            {"intencao": "consultar_quilombola", "confianca": 0.9},
         ]
+        com_dados = uma_parcial(intencao="consultar_queimadas", rotulo="queimadas")
+        com_dados["total_resultados"] = 37
+        sem_dados = uma_parcial(intencao="consultar_quilombola", rotulo="quilombolas")
+        sem_dados["total_resultados"] = 0
+
+        resposta = agregar(
+            "situação de caçapava", plano, {}, [com_dados, sem_dados], GeradorFalso(),
+        )
+
+        intents = {d["intencao"] for d in resposta["intencoes_detectadas"]}
+        assert intents == {"consultar_queimadas"}
+
+    def test_deve_preservar_grupos_zero_em_intencao_normal(self):
+        # Multi-municipio com queimadas: "Sorocaba: sem registros" é informação válida.
+        plano = um_plano(
+            intencao_principal="consultar_queimadas", eixo_agrupamento="municipio",
+        )
+        com_dados = uma_parcial(
+            intencao="consultar_queimadas", municipio="Campinas", rotulo="Campinas",
+        )
+        com_dados["total_resultados"] = 12
+        sem_dados = uma_parcial(
+            intencao="consultar_queimadas", municipio="Sorocaba", rotulo="Sorocaba",
+        )
+        sem_dados["total_resultados"] = 0
+
+        resposta = agregar(
+            "queimadas em campinas e sorocaba",
+            plano, {}, [com_dados, sem_dados], GeradorFalso(),
+        )
+
+        rotulos = {g["rotulo"] for g in resposta["grupos"]}
+        assert rotulos == {"Campinas", "Sorocaba"}
+
+
+class TestCasosNegativos:
+    def test_deve_omitir_qgis_url_quando_pergunta_eh_string_vazia(self):
+        # Arrange
+        plano = um_plano(intencao_principal="consultar_queimadas")
+        parciais = [uma_parcial(intencao="consultar_queimadas")]
 
         # Act
-        resposta = agregar("q", plano, {}, parciais, GeradorFalso())
+        resposta = agregar("", plano, {}, parciais, GeradorFalso())
 
         # Assert
-        urls = resposta.get("qgis_urls") or []
-        rotulos = [u["rotulo"] for u in urls]
-        assert "Queimadas" in rotulos
-        assert "Resumo" not in rotulos
+        assert "qgis_url" not in resposta

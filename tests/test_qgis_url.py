@@ -215,6 +215,31 @@ class TestSICARCodigoImovel:
         _, query = _parse(url)
         assert "cod_imovel" not in query
 
+    def test_deve_apontar_para_endpoint_de_cruzamento_quando_consulta_eh_por_cod_imovel(self):
+        url = construir_qgis_url(
+            "consultar_imovel_rural",
+            uma_entidade(cod_imovel="SP-3555406-ABC"),
+        )
+        path, _ = _parse(url)
+        assert path == "/api/geo/imovel"
+
+    def test_deve_usar_endpoint_sicar_padrao_quando_imovel_rural_sem_cod(self):
+        url = construir_qgis_url(
+            "consultar_imovel_rural",
+            uma_entidade(municipios=["Campinas"]),
+        )
+        path, _ = _parse(url)
+        assert path == "/api/geo/sicar"
+
+    def test_deve_omitir_municipio_no_endpoint_de_cruzamento_mesmo_se_fornecido(self):
+        url = construir_qgis_url(
+            "consultar_imovel_rural",
+            uma_entidade(cod_imovel="SP-3555406-ABC", municipios=["Campinas"]),
+        )
+        _, query = _parse(url)
+        assert "municipio" not in query
+        assert query["cod_imovel"] == ["SP-3555406-ABC"]
+
 
 # --------------------------------------------------------------------------
 # base_url
@@ -255,3 +280,46 @@ class TestURLSemFiltros:
     def test_deve_retornar_path_sem_query_quando_entidades_eh_dict_vazio(self):
         url = construir_qgis_url("consultar_unidade_conservacao", {})
         assert url == "/api/geo/unidades-conservacao"
+
+
+# --------------------------------------------------------------------------
+# Pergunta -> usa endpoint unificado /api/geo/consulta
+# --------------------------------------------------------------------------
+
+class TestEndpointConsultaUnificada:
+    def test_deve_apontar_para_endpoint_de_consulta_quando_pergunta_eh_fornecida(self):
+        url = construir_qgis_url(
+            "consultar_queimadas",
+            uma_entidade(municipios=["Ubatuba"]),
+            pergunta="queimadas em ubatuba",
+        )
+        path, query = _parse(url)
+        assert path == "/api/geo/consulta"
+        assert query["pergunta"] == ["queimadas em ubatuba"]
+
+    def test_deve_incluir_cod_imovel_no_endpoint_unificado(self):
+        url = construir_qgis_url(
+            "consultar_imovel_rural",
+            uma_entidade(cod_imovel=" sp-3555406-abc "),
+            pergunta="ameacas no SP-3555406-abc",
+        )
+        _, query = _parse(url)
+        assert query["cod_imovel"] == ["SP-3555406-ABC"]
+
+    def test_deve_ignorar_intencao_desconhecida_quando_pergunta_eh_fornecida(self):
+        url = construir_qgis_url(
+            "resumo_municipal",
+            uma_entidade(municipios=["Campinas"]),
+            pergunta="resumo de campinas",
+        )
+        path, _ = _parse(url)
+        assert path == "/api/geo/consulta"
+
+    def test_deve_voltar_para_endpoint_por_intencao_quando_pergunta_vazia(self):
+        url = construir_qgis_url(
+            "consultar_queimadas",
+            uma_entidade(),
+            pergunta="",
+        )
+        path, _ = _parse(url)
+        assert path == "/api/geo/queimadas"

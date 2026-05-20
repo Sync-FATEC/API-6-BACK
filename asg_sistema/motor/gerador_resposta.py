@@ -796,23 +796,32 @@ class GeradorResposta:
             primeiro = re.sub(r"\s*\([A-Z]{2}\)\s*$", "", primeiro).strip()
             return primeiro
 
-        # Queries em ordem de prioridade para encontrar centroide
+        # Queries em ordem de prioridade. Estrategia para municipios costeiros
         _queries = [
-            "SELECT AVG(longitude) as lon, AVG(latitude) as lat "
-            "FROM queimadas "
-            "WHERE municipio ILIKE :mun "
-            "AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
+            # SICAR — pega o centroide do MAIOR imovel rural (mais provavel ser inland)
+            "SELECT ST_X(ST_Centroid(geom)) as lon, ST_Y(ST_Centroid(geom)) as lat "
+            "FROM sicar_imoveis "
+            "WHERE municipio ILIKE :mun AND geom IS NOT NULL "
+            "ORDER BY ST_Area(geom) DESC LIMIT 1",
+            # Terras Indigenas — centroide da uniao (area-weighted)
             "SELECT ST_X(ST_Centroid(ST_Collect(geom))) as lon, "
             "ST_Y(ST_Centroid(ST_Collect(geom))) as lat "
             "FROM terras_indigenas "
             "WHERE municipio ILIKE :mun "
             "AND geom IS NOT NULL "
             "AND UPPER(TRIM(uf)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
-            "SELECT AVG(ST_X(ST_Centroid(geom))) as lon, AVG(ST_Y(ST_Centroid(geom))) as lat "
+            # DETER — centroide da uniao
+            "SELECT ST_X(ST_Centroid(ST_Collect(geom))) as lon, "
+            "ST_Y(ST_Centroid(ST_Collect(geom))) as lat "
             "FROM desmatamento_alertas "
             "WHERE municipio ILIKE :mun "
             "AND geom IS NOT NULL "
             "AND UPPER(TRIM(uf)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
+            # Queimadas (ultimo recurso — pontos podem cair em ilhas/mar)
+            "SELECT AVG(longitude) as lon, AVG(latitude) as lat "
+            "FROM queimadas "
+            "WHERE municipio ILIKE :mun "
+            "AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')",
         ]
 
         centroides = {}

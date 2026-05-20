@@ -2,6 +2,13 @@
 
 Usado para anexar uma `qgis_url` em cada resposta de /api/consulta, permitindo
 que o usuario abra a mesma consulta diretamente no QGIS.
+
+Estrategia:
+- Quando `pergunta` eh fornecida: usa `/api/geo/consulta?pergunta=...` —
+  garante que QGIS receba exatamente o mesmo geojson que o chat exibiu
+  (multi-intencao, multi-municipio, cruzamento por CAR, tudo em uma camada).
+- Caso contrario: fallback para o endpoint especifico da intencao
+  (`/api/geo/queimadas`, `/api/geo/sicar`, etc.), com filtros parametrizados.
 """
 
 from __future__ import annotations
@@ -9,7 +16,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlencode
 
-# Mapa intencao -> path do endpoint /api/geo
+# Mapa intencao -> path do endpoint /api/geo (fallback)
 _INTENCAO_PARA_PATH: dict[str, str] = {
     "consultar_queimadas": "/api/geo/queimadas",
     "consultar_desmatamento": "/api/geo/desmatamento",
@@ -36,17 +43,31 @@ def construir_qgis_url(
     intencao: str,
     entidades: dict,
     base_url: str = "",
+    pergunta: str | None = None,
 ) -> str | None:
     """Constroi a URL do /api/geo correspondente.
 
-    Retorna None se a intencao nao tem endpoint geo direto (ex: resumo_municipal).
+    Se `pergunta` eh fornecida, usa o endpoint unificado /api/geo/consulta —
+    garante que o QGIS receba a mesma camada que o chat exibe, com todas as
+    fontes envolvidas (multi-intencao, cruzamento por CAR, etc.).
+
+    Retorna None se nao for possivel construir uma URL para essa consulta.
     """
+    base = base_url.rstrip("/") if base_url else ""
+
+    if pergunta and pergunta.strip():
+        params = {"pergunta": pergunta.strip()}
+        cod = entidades.get("cod_imovel")
+        if cod:
+            params["cod_imovel"] = str(cod).strip().upper()
+        return f"{base}/api/geo/consulta?{urlencode(params)}"
+
     path = _INTENCAO_PARA_PATH.get(intencao)
     if not path:
         return None
 
     permitidos = _FILTROS_POR_PATH.get(path, set())
-    params: dict[str, str] = {}
+    params = {}
 
     municipios = entidades.get("municipios") or []
     if "municipio" in permitidos and municipios:
@@ -65,6 +86,11 @@ def construir_qgis_url(
     if "cod_imovel" in permitidos and cod:
         params["cod_imovel"] = str(cod).strip().upper()
 
+    # Para consulta por codigo CAR, troca para o endpoint de cruzamento (SICAR + ameacas).
+    if intencao == "consultar_imovel_rural" and params.get("cod_imovel"):
+        path = "/api/geo/imovel"
+        params = {"cod_imovel": params["cod_imovel"]}
+
     if "ano" in permitidos and periodo.get("inicio"):
         try:
             params["ano"] = str(int(str(periodo["inicio"])[:4]))
@@ -72,5 +98,4 @@ def construir_qgis_url(
             pass
 
     query = urlencode(params)
-    base = base_url.rstrip("/") if base_url else ""
     return f"{base}{path}?{query}" if query else f"{base}{path}"
