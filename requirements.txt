@@ -54,6 +54,7 @@ pystac-client
 rasterio
 pluggy==1.6.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 preshed==3.0.13
 psycopg2-binary==2.9.11
 python-jose[cryptography]==3.5.0
