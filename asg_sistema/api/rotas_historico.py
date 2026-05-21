@@ -34,6 +34,34 @@ def listar_conversas(
     }
 
 
+@router.get("/historico/todos")
+def listar_todas_conversas(
+    db: Session = Depends(obter_sessao),
+    usuario: Usuario = Depends(obter_usuario_atual),
+):
+    if usuario.papel != "ADMIN":
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    results = (
+        db.query(Conversa, Usuario)
+        .join(Usuario, Conversa.usuario_id == Usuario.id)
+        .order_by(Conversa.atualizado_em.desc())
+        .all()
+    )
+    return {
+        "conversas": [
+            {
+                "id": c.id,
+                "titulo": c.titulo,
+                "criado_em": c.criado_em,
+                "atualizado_em": c.atualizado_em,
+                "usuario": {"id": u.id, "nome": u.nome, "email": u.email},
+            }
+            for c, u in results
+        ]
+    }
+
+
 @router.get("/historico/{conversa_id}")
 def obter_conversa(
     conversa_id: int,
