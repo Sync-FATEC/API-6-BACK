@@ -38,6 +38,19 @@ class Configuracao(BaseSettings):
     jwt_algoritmo: str = "HS256"
     jwt_expiracao_minutos: int = 60 * 24
 
+    # ===========================================================
+    # TODO: Configurar variáveis abaixo para envio de e-mail.
+    # Crie uma senha de app no Google:
+    #   Conta Google > Segurança > Verificação em 2 etapas > Senhas de app
+    # Adicione ao .env:
+    #   ASG_EMAIL_REMETENTE=seu_email@gmail.com
+    #   ASG_EMAIL_SENHA_APP=xxxx xxxx xxxx xxxx   (senha de app de 16 dígitos)
+    # ===========================================================
+    email_remetente: str | None = None
+    email_senha_app: str | None = None
+    # URL base do frontend — usada no link de redefinição de senha enviado por e-mail
+    frontend_url: str = "http://localhost:3000"
+
     @field_validator("jwt_segredo")
     @classmethod
     def jwt_segredo_nao_vazio(cls, v: str) -> str:

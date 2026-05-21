@@ -6,15 +6,19 @@ from sqlalchemy.orm import Session
 
 from asg_sistema.auth.deps import obter_usuario_atual, exigir_admin
 from asg_sistema.auth import jwt_tokens, senha as senha_util
+from asg_sistema.auth.email import enviar_email_reset_senha
+from asg_sistema.config import config
 from asg_sistema.db.conexao import obter_sessao
 from asg_sistema.db.models import Usuario
 from asg_sistema.schemas.auth import (
     AlterarSenhaRequest,
     CadastroRequest,
     EditarUsuarioRequest,
+    EsqueciSenhaRequest,
     LoginRequest,
     LoginResponse,
     MensagemResponse,
+    RedefinirSenhaRequest,
     UsuarioPublico,
 )
 
@@ -217,6 +221,55 @@ def listar_usuarios(
     """
     usuarios = db.query(Usuario).order_by(Usuario.id).all()
     return [_usuario_publico(u) for u in usuarios]
+
+
+@router.post("/esqueci-senha", response_model=MensagemResponse)
+def esqueci_senha(payload: EsqueciSenhaRequest, db: Session = Depends(obter_sessao)):
+    """
+    Envia link de redefinição de senha por e-mail.
+    Sempre retorna sucesso para não revelar se o e-mail está cadastrado.
+    """
+    email = payload.email.lower().strip()
+    usuario = db.query(Usuario).filter(Usuario.email == email).first()
+
+    if usuario:
+        token = jwt_tokens.criar_token_reset(email)
+        link = f"{config.frontend_url}/redefinir-senha?token={token}"
+        try:
+            enviar_email_reset_senha(email, link)
+        except RuntimeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(e),
+            ) from e
+
+    return MensagemResponse(
+        mensagem="Se o e-mail estiver cadastrado, você receberá as instruções em breve."
+    )
+
+
+@router.post("/redefinir-senha", response_model=MensagemResponse)
+def redefinir_senha(payload: RedefinirSenhaRequest, db: Session = Depends(obter_sessao)):
+    """Redefine a senha usando o token recebido por e-mail (válido por 15 minutos)."""
+    email = jwt_tokens.decodificar_token_reset(payload.token)
+    if email is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token inválido ou expirado.",
+        )
+
+    usuario = db.query(Usuario).filter(Usuario.email == email).first()
+    if usuario is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado.",
+        )
+
+    usuario.senha_hash = senha_util.hash_senha(payload.nova_senha)
+    db.add(usuario)
+    db.commit()
+
+    return MensagemResponse(mensagem="Senha redefinida com sucesso.")
 
 
 @router.delete("/usuarios/{usuario_id}", response_model=MensagemResponse)
