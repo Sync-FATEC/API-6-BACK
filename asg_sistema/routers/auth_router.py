@@ -138,12 +138,40 @@ def editar_usuario(
             detail="Você só pode editar seu próprio perfil.",
         )
 
+    novo_email = payload.email.lower().strip() if payload.email else None
+
+    if novo_email and novo_email != usuario_alvo.email:
+        email_existente = db.query(Usuario).filter(
+            Usuario.email == novo_email,
+            Usuario.id != usuario_id
+        ).first()
+        if email_existente:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="E-mail já está em uso por outro usuário.",
+            )
+
     if payload.nome is not None:
-        usuario_alvo.nome = payload.nome.strip()
+        nome_limpo = payload.nome.strip()
+        if not nome_limpo:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="O nome não pode ser vazio.",
+            )
+        usuario_alvo.nome = nome_limpo
+
     if payload.cargo is not None:
-        usuario_alvo.cargo = payload.cargo.strip()
-    if payload.email is not None:
-        usuario_alvo.email = payload.email.lower().strip()
+        cargo_limpo = payload.cargo.strip()
+        if not cargo_limpo:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="O cargo não pode ser vazio.",
+            )
+        usuario_alvo.cargo = cargo_limpo
+
+    if novo_email:
+        usuario_alvo.email = novo_email
+
     if payload.papel is not None:
         if payload.papel == "ADMIN" and usuario_logado.papel != "ADMIN":
             raise HTTPException(
@@ -151,10 +179,20 @@ def editar_usuario(
                 detail="Apenas administradores podem definir o papel ADMIN.",
             )
         usuario_alvo.papel = payload.papel
+
     if payload.nova_senha is not None:
+        if len(payload.nova_senha) < 8:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A nova senha deve ter pelo menos 8 caracteres.",
+            )
+        if senha_util.verificar_senha(payload.nova_senha, usuario_alvo.senha_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A nova senha deve ser diferente da senha atual.",
+            )
         usuario_alvo.senha_hash = senha_util.hash_senha(payload.nova_senha)
 
-    db.add(usuario_alvo)
     try:
         db.commit()
         db.refresh(usuario_alvo)
