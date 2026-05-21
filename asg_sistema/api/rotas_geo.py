@@ -101,6 +101,21 @@ _LIMITES_BASE = {
 
 CATALOGO_CAMADAS = [
     {
+        "id": "consulta",
+        "nome": "Consulta livre (texto)",
+        "fonte": "Multi-fonte",
+        "geometria": "Geometry",
+        "srid": 4326,
+        "atributos": ["fonte", "..."],
+        "filtros": ["pergunta", "cod_imovel"],
+        "limites": {},
+        "url": "/geo/consulta",
+        "descricao": (
+            "Retorna exatamente o mesmo geojson que o chat exibe no mapa. "
+            "Use o filtro `pergunta=` para descrever a consulta em linguagem natural."
+        ),
+    },
+    {
         "id": "queimadas",
         "nome": "Focos de Queimadas (INPE)",
         "fonte": "INPE",
@@ -172,6 +187,22 @@ CATALOGO_CAMADAS = [
         },
         "url": "/geo/sicar",
         "descricao": "Cadastro Ambiental Rural - imoveis rurais com geometrias.",
+    },
+    {
+        "id": "imovel",
+        "nome": "Imovel + Ameacas (cruzamento)",
+        "fonte": "SICAR + cruzamento",
+        "geometria": "Geometry",
+        "srid": 4326,
+        "atributos": ["cod_imovel", "fonte", "classe", "data_avistamento", "frp", "ano"],
+        "filtros": ["cod_imovel"],
+        "limites": {},
+        "url": "/geo/imovel",
+        "descricao": (
+            "Camada combinada do imovel SICAR com queimadas, DETER e PRODES "
+            "em raio configuravel (padrao 5km). Use para abrir no QGIS a mesma "
+            "visao do cruzamento exibida no chat por codigo CAR."
+        ),
     },
     {
         "id": "unidades_conservacao",
@@ -437,26 +468,220 @@ def geojson_sicar(
     return _resposta_geojson(_montar_feature_collection(rows, fonte="sicar"))
 
 
-# ---------------------------------------------------------------------------
-# Camadas sem geometria (tabulares) - retornadas como FeatureCollection vazia
-# ---------------------------------------------------------------------------
+_BUFFER_BBOX_DEG = 0.045  # ~5km
+
+_CRUZAMENTO_QUERIES = [
+    {
+        "fonte": "sicar",
+        "sql": """
+            SELECT
+                ST_AsGeoJSON(ST_Transform(geom, 4326), 6) AS geometry,
+                cod_imovel, municipio, num_area, ind_status, ind_tipo,
+                des_condic, mod_fiscal, dat_criacao, dat_atualizacao
+            FROM sicar_imoveis
+            WHERE cod_imovel = :cod AND geom IS NOT NULL
+        """,
+    },
+    {
+        "fonte": "queimadas",
+        "sql": f"""
+            SELECT
+                ST_AsGeoJSON(ST_Transform(q.geom, 4326), 6) AS geometry,
+                q.id, q.municipio, q.satelite, q.data_hora, q.frp, q.bioma,
+                q.latitude, q.longitude, q.risco_fogo
+            FROM queimadas q, fazenda f
+            WHERE q.geom IS NOT NULL
+              AND q.geom && ST_Expand(f.geom, {_BUFFER_BBOX_DEG})
+              AND ST_DWithin(f.geom::geography, q.geom::geography, :raio_m)
+            ORDER BY ST_Distance(f.geom::geography, q.geom::geography)
+            LIMIT 200
+        """,
+    },
+    {
+        "fonte": "deter",
+        "sql": f"""
+            SELECT
+                ST_AsGeoJSON(ST_Transform(d.geom, 4326), 6) AS geometry,
+                d.id, d.classe, d.municipio, d.data_avistamento, d.area_total_km2
+            FROM desmatamento_alertas d, fazenda f
+            WHERE d.geom IS NOT NULL
+              AND d.geom && ST_Expand(f.geom, {_BUFFER_BBOX_DEG})
+              AND ST_DWithin(f.geom::geography, d.geom::geography, :raio_m)
+            ORDER BY ST_Distance(f.geom::geography, d.geom::geography)
+            LIMIT 100
+        """,
+    },
+    {
+        "fonte": "prodes",
+        "sql": f"""
+            SELECT
+                ST_AsGeoJSON(ST_Transform(p.geom, 4326), 6) AS geometry,
+                p.uid, p.ano, p.classe_nome, p.area_km, p.fonte_bioma
+            FROM prodes_desmatamento p, fazenda f
+            WHERE p.geom IS NOT NULL
+              AND p.geom && ST_Expand(f.geom, {_BUFFER_BBOX_DEG})
+              AND ST_DWithin(f.geom::geography, p.geom::geography, :raio_m)
+            ORDER BY ST_Distance(f.geom::geography, p.geom::geography)
+            LIMIT 200
+        """,
+    },
+]
+
+
+@router.get("/consulta")
+def geojson_consulta(
+    pergunta: str = Query(..., min_length=1, description="Mesma pergunta usada em /api/consulta"),
+    cod_imovel: str | None = Query(None, description="Codigo CAR opcional (cruzamento espacial)"),
+):
+    """Retorna o geojson completo da mesma resposta de /api/consulta.
+
+    Util para abrir no QGIS exatamente a mesma camada exibida no mapa do chat,
+    independente da intencao detectada (queimadas, desmatamento, CAR, multi-tema...).
+    """
+    from asg_sistema.api.rotas_consulta import obter_interpretador
+
+    interpretador = obter_interpretador()
+    resposta = interpretador.processar(pergunta, cod_imovel)
+    geojson = resposta.get("geojson") or {
+        "type": "FeatureCollection",
+        "features": [],
+    }
+    if not isinstance(geojson, dict) or geojson.get("type") != "FeatureCollection":
+        geojson = {"type": "FeatureCollection", "features": []}
+
+    features = geojson.get("features") or []
+    geojson["totalFeatures"] = len(features)
+
+    bbox = _calcular_bbox_features(features)
+    if bbox:
+        geojson["bbox"] = bbox
+
+    return _resposta_geojson(geojson)
+
+
+def _calcular_bbox_features(features: list[dict]) -> list[float] | None:
+    """Retorna [minLon, minLat, maxLon, maxLat] do conjunto de features (EPSG:4326)."""
+    if not features:
+        return None
+    min_lon = min_lat = float("inf")
+    max_lon = max_lat = float("-inf")
+
+    def _walk(coords):
+        nonlocal min_lon, min_lat, max_lon, max_lat
+        if not isinstance(coords, list) or not coords:
+            return
+        if isinstance(coords[0], (int, float)):
+            lon, lat = coords[0], coords[1]
+            if lon < min_lon: min_lon = lon
+            if lat < min_lat: min_lat = lat
+            if lon > max_lon: max_lon = lon
+            if lat > max_lat: max_lat = lat
+            return
+        for c in coords:
+            _walk(c)
+
+    for feat in features:
+        geom = feat.get("geometry") or {}
+        _walk(geom.get("coordinates"))
+
+    if min_lon == float("inf"):
+        return None
+    return [min_lon, min_lat, max_lon, max_lat]
+
+
+@router.get("/imovel")
+def geojson_imovel(
+    cod_imovel: str = Query(..., description="Codigo CAR exato"),
+    raio_metros: int = Query(5000, ge=100, le=20000),
+):
+    """Retorna o imovel SICAR + camadas de ameacas a sua volta (queimadas, DETER, PRODES).
+
+    Util para abrir no QGIS uma visao consolidada do mesmo cruzamento que o
+    chat exibe para uma consulta por codigo CAR.
+    """
+    cod = cod_imovel.strip().upper()
+
+    # Pre-busca o imovel SICAR para garantir que existe.
+    imovel_row = executar_consulta(
+        "SELECT 1 FROM sicar_imoveis WHERE cod_imovel = :cod AND geom IS NOT NULL LIMIT 1",
+        {"cod": cod},
+    )
+    if not imovel_row:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Imovel SICAR nao encontrado: {cod}",
+        )
+
+    features: list[dict] = []
+    fonte_imovel_geom_param = {"cod": cod, "raio_m": raio_metros}
+
+    for spec in _CRUZAMENTO_QUERIES:
+        fonte = spec["fonte"]
+        if fonte == "sicar":
+            rows = executar_consulta(spec["sql"], {"cod": cod})
+        else:
+            sql_com_fazenda = f"""
+                WITH fazenda AS (
+                    SELECT geom FROM sicar_imoveis
+                    WHERE cod_imovel = :cod AND geom IS NOT NULL
+                    LIMIT 1
+                )
+                {spec["sql"]}
+            """
+            rows = executar_consulta(sql_com_fazenda, fonte_imovel_geom_param)
+
+        for row in rows:
+            geom_str = row.pop("geometry", None)
+            if not geom_str:
+                continue
+            props = {k: (str(v) if v is not None else None) for k, v in row.items()}
+            props["fonte"] = fonte
+            features.append({
+                "type": "Feature",
+                "geometry": json.loads(geom_str),
+                "properties": props,
+            })
+
+    return _resposta_geojson({
+        "type": "FeatureCollection",
+        "features": features,
+        "totalFeatures": len(features),
+        "cod_imovel": cod,
+        "raio_metros": raio_metros,
+        "nota": (
+            "Camada combinada: poligono SICAR + queimadas/DETER/PRODES "
+            f"em raio de {raio_metros} metros."
+        ),
+    })
+
 
 import re as _re
 
 _CENTROID_QUERIES_FALLBACK = [
-    """SELECT AVG(longitude) AS lon, AVG(latitude) AS lat
-       FROM queimadas
-       WHERE municipio ILIKE :mun
-         AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')""",
+    # SICAR — centroide do maior imovel rural do municipio. Estatisticamente
+    # eh uma fazenda continental, evitando que lotes em ilhas (Ubatuba,
+    # Sao Sebastiao, etc.) arrastem a media para o oceano.
+    """SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat
+       FROM sicar_imoveis
+       WHERE municipio ILIKE :mun AND geom IS NOT NULL
+       ORDER BY ST_Area(geom) DESC LIMIT 1""",
+    # Terras Indigenas — centroide da uniao
     """SELECT ST_X(ST_Centroid(ST_Collect(geom))) AS lon,
               ST_Y(ST_Centroid(ST_Collect(geom))) AS lat
        FROM terras_indigenas
        WHERE municipio ILIKE :mun
          AND geom IS NOT NULL AND UPPER(TRIM(uf)) = 'SP'""",
-    """SELECT AVG(ST_X(ST_Centroid(geom))) AS lon, AVG(ST_Y(ST_Centroid(geom))) AS lat
+    # DETER — centroide da uniao
+    """SELECT ST_X(ST_Centroid(ST_Collect(geom))) AS lon,
+              ST_Y(ST_Centroid(ST_Collect(geom))) AS lat
        FROM desmatamento_alertas
        WHERE municipio ILIKE :mun
          AND geom IS NOT NULL AND UPPER(TRIM(uf)) = 'SP'""",
+    # Queimadas (ultimo recurso — pode arrastar pro mar)
+    """SELECT AVG(longitude) AS lon, AVG(latitude) AS lat
+       FROM queimadas
+       WHERE municipio ILIKE :mun
+         AND UPPER(TRIM(estado)) IN ('SP', 'SAO PAULO', 'SÃO PAULO')""",
 ]
 
 

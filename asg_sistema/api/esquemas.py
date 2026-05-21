@@ -1,5 +1,7 @@
 """Schemas Pydantic para request/response da API."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -46,3 +48,5 @@ class ConsultaResponse(BaseModel):
     intencoes_detectadas: list[dict] | None = None
     conversa_id: int | None = None
     mensagem_id: int | None = None
+    mensagem_enviada_em: datetime | None = None
+    mensagem_recebida_em: datetime | None = None
