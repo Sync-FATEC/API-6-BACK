@@ -53,3 +53,12 @@ class EditarUsuarioRequest(BaseModel):
     email: EmailStr | None = Field(default=None)
     papel: PapelUsuario | None = Field(default=None)
     nova_senha: str | None = Field(default=None, min_length=8)
+
+
+class EsqueciSenhaRequest(BaseModel):
+    email: EmailStr
+
+
+class RedefinirSenhaRequest(BaseModel):
+    token: str
+    nova_senha: str = Field(min_length=8, description="Mínimo de 8 caracteres")
