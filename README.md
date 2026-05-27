@@ -9,8 +9,15 @@ Sistema de consulta por linguagem natural a dados ASG (Ambiental, Social e Gover
 4. [Pipeline de PLN](#pipeline-de-pln)
 5. [Banco de Dados](#banco-de-dados)
 6. [API REST](#api-rest)
-7. [Como Executar](#como-executar)
-8. [Tecnologias Utilizadas](#tecnologias-utilizadas)
+7. [Autenticação](#autenticação)
+8. [Histórico de Conversas](#histórico-de-conversas)
+9. [Dashboard](#dashboard)
+10. [Nota de Risco ASG](#nota-de-risco-asg)
+11. [Relatório PDF](#relatório-pdf)
+12. [Imagens de Satélite Sentinel-2](#imagens-de-satélite-sentinel-2)
+13. [Integração com QGIS](#integração-com-qgis)
+14. [Como Executar](#como-executar)
+15. [Tecnologias Utilizadas](#tecnologias-utilizadas)
 
 ---
 
@@ -21,6 +28,8 @@ O sistema permite que um usuário digite uma pergunta em linguagem natural (ex: 
 - Resumo textual da consulta
 - Dados encontrados com fontes rastreáveis
 - GeoJSON compatível com QGIS e sistemas de mapa
+- Nota de risco ASG calculada via método AHP
+- URL de exportação para QGIS
 
 ### Fluxo de uma Consulta
 
@@ -47,6 +56,8 @@ Usuario: "Quais terras indigenas existem em Ubatuba?"
                             resumo: "Foram encontradas 2 terras indigenas...",
                             fontes: [{nome: "FUNAI", url: "..."}],
                             geojson: {type: "FeatureCollection", ...},
+                            nota_risco: 7.4,
+                            qgis_url: "http://localhost:8000/api/geo/...",
                             tempo_ms: 88
                           }
 ```
@@ -120,16 +131,37 @@ O sistema possui agendamento de ETL via API REST com APScheduler. O agendamento 
 
 ```bash
 # Criar agendamento (ex: todo dia 5 do mês às 16h55)
-POST /api/agendamento/
+POST /api/v1/agendamento/
 
 # Listar agendamentos ativos
-GET /api/agendamento/
+GET /api/v1/agendamento/
+
+# Remover agendamento
+DELETE /api/v1/agendamento/{id}
 
 # Disparar ETL imediatamente via API
-POST /api/etl/executar
+POST /api/etl/executar?etapa=full&skip_sicar=false
+
+# Acompanhar status de uma execução
+GET /api/etl/status/{execution_id}
 ```
 
 O cooldown padrão entre execuções é de 6 horas (configurável). O histórico de execuções fica em `/api/etl/historico`.
+
+### Status em Tempo Real do ETL
+
+Cada execução via API gera um `execution_id` único. O endpoint `/api/etl/status/{execution_id}` retorna o estado detalhado da execução:
+
+```json
+{
+  "execution_id": "abc123...",
+  "etapa_atual": "pipeline",
+  "status_execucao": "em_andamento",
+  "finalizado": false,
+  "mensagem": "Iniciando subprocesso ETL (etapa: full).",
+  "eventos": [...]
+}
+```
 
 ---
 
@@ -240,6 +272,7 @@ Classificador **Naive Bayes Multinomial** treinado com TF-IDF para detectar a in
 | `consultar_prodes` | "Desmatamento anual na Mata Atlântica" | prodes_desmatamento |
 | `consultar_imovel_rural` | "Imóveis rurais em Campinas" | sicar_imoveis |
 | `resumo_municipal` | "Situação ambiental de Campinas" | todas |
+| `consultar_status_fazenda` | "Qual o status da fazenda com CAR SP-123?" | sicar_imoveis |
 
 - **Dados de treino**: 111 exemplos rotulados manualmente (`dados_treinamento/intencoes.json`)
 - **Acurácia**: >90% com validação cruzada
@@ -251,6 +284,7 @@ Busca híbrida combinando:
 1. **Similaridade vetorial** (pgvector): embedding da pergunta vs embeddings do corpus
 2. **Filtros estruturados**: fonte, município, período temporal
 3. **Intenções múltiplas**: detecta palavras-chave secundárias e faz merge de resultados de fontes diferentes
+4. **Tolerância a erros tipográficos**: busca fuzzy de municípios para maior resiliência
 
 ```sql
 SELECT texto, municipio, fonte, metadados_json,
@@ -265,6 +299,7 @@ LIMIT 15
 
 - **Municípios**: SpaCy PhraseMatcher com lista dos 645 municípios de SP (IBGE)
 - **Períodos temporais**: Regex para "últimos X meses", "em 2025", etc.
+- **Código CAR**: Extração e validação de código CAR/SICAR dentro da pergunta
 
 ---
 
@@ -294,6 +329,9 @@ LIMIT 15
 | `unidades_conservacao` | ~15 | Tabular | MMA/ICMBio |
 | `comunidades_quilombolas` | 52 | Tabular | Palmares |
 | `corpus_asg` | ~18.000 | — | Todas (textos + embeddings) |
+| `usuarios` | — | — | Sistema (autenticação) |
+| `conversas` | — | — | Sistema (histórico) |
+| `mensagens` | — | — | Sistema (histórico) |
 
 **Nota PRODES**: insere 1 amostra a cada 50 registros no corpus (~1.000 textos) para otimizar tempo de embedding. Os 50K registros completos ficam na tabela `prodes_desmatamento` com geometria.
 
@@ -307,32 +345,43 @@ LIMIT 15
 
 ### Endpoints
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| `POST` | `/api/consulta` | Consulta em linguagem natural |
-| `GET` | `/api/dados/queimadas` | Dados estruturados de queimadas |
-| `GET` | `/api/dados/terras_indigenas` | Dados de terras indígenas |
-| `GET` | `/api/dados/desmatamento` | Alertas de desmatamento |
-| `GET` | `/api/dados/unidades_conservacao` | Unidades de conservação |
-| `GET` | `/api/dados/prodes` | Dados PRODES desmatamento anual |
-| `GET` | `/api/dados/quilombolas` | Comunidades quilombolas |
-| `GET` | `/api/geo/queimadas` | GeoJSON para mapa/QGIS |
-| `GET` | `/api/geo/terras_indigenas` | GeoJSON para mapa/QGIS |
-| `GET` | `/api/geo/desmatamento` | GeoJSON DETER para mapa/QGIS |
-| `GET` | `/api/geo/prodes` | GeoJSON PRODES para mapa/QGIS |
-| `GET` | `/api/geo/quilombolas` | Dados quilombolas (tabulares) |
-| `GET` | `/api/saude` | Health check com contagens por tabela |
-| `GET` | `/api/etl/historico` | Histórico de execuções ETL |
-| `POST` | `/api/etl/executar` | Dispara pipeline ETL via API |
-| `GET` | `/api/agendamento/` | Lista agendamentos ativos |
-| `POST` | `/api/agendamento/` | Cria novo agendamento ETL |
-| `DELETE` | `/api/agendamento/{id}` | Remove agendamento |
+| Método | Rota | Descrição | Auth |
+|--------|------|-----------|------|
+| `POST` | `/api/consulta` | Consulta em linguagem natural | Sim |
+| `GET` | `/api/dados/queimadas` | Dados estruturados de queimadas | Sim |
+| `GET` | `/api/dados/terras_indigenas` | Dados de terras indígenas | Sim |
+| `GET` | `/api/dados/desmatamento` | Alertas de desmatamento | Sim |
+| `GET` | `/api/dados/unidades_conservacao` | Unidades de conservação | Sim |
+| `GET` | `/api/dados/prodes` | Dados PRODES desmatamento anual | Sim |
+| `GET` | `/api/dados/quilombolas` | Comunidades quilombolas | Sim |
+| `GET` | `/api/dados/queimadas/{id}/imagem-satelite` | Imagem Sentinel-2 da queimada | Sim |
+| `GET` | `/api/geo/queimadas` | GeoJSON para mapa/QGIS | Sim |
+| `GET` | `/api/geo/terras_indigenas` | GeoJSON para mapa/QGIS | Sim |
+| `GET` | `/api/geo/desmatamento` | GeoJSON DETER para mapa/QGIS | Sim |
+| `GET` | `/api/geo/prodes` | GeoJSON PRODES para mapa/QGIS | Sim |
+| `GET` | `/api/geo/quilombolas` | Dados quilombolas (tabulares) | Sim |
+| `GET` | `/api/dashboard` | Dashboard completo (métricas + municípios + anos) | Sim |
+| `GET` | `/api/dashboard/metricas` | Métricas consolidadas | Sim |
+| `GET` | `/api/dashboard/municipios` | Dados agregados por município | Sim |
+| `GET` | `/api/dashboard/anos` | Dados agregados por ano | Sim |
+| `GET` | `/api/historico` | Lista conversas do usuário autenticado | Sim |
+| `GET` | `/api/historico/todos` | Lista histórico de todos os usuários (ADMIN) | Admin |
+| `GET` | `/api/historico/{conversa_id}` | Detalhes de uma conversa | Sim |
+| `DELETE` | `/api/historico/{conversa_id}` | Exclui uma conversa | Sim |
+| `GET` | `/api/saude` | Health check com contagens por tabela | Não |
+| `GET` | `/api/etl/historico` | Histórico de execuções ETL | Sim |
+| `GET` | `/api/etl/status/{execution_id}` | Status detalhado de uma execução ETL | Sim |
+| `POST` | `/api/etl/executar` | Dispara pipeline ETL via API | Admin |
+| `GET` | `/api/v1/agendamento/` | Lista agendamentos ativos | Admin |
+| `POST` | `/api/v1/agendamento/` | Cria novo agendamento ETL | Admin |
+| `DELETE` | `/api/v1/agendamento/{id}` | Remove agendamento | Admin |
 
 ### Exemplo de Requisição
 
 ```bash
 curl -X POST http://localhost:8000/api/consulta \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{"pergunta": "Quais terras indigenas existem em Ubatuba?"}'
 ```
 
@@ -349,23 +398,208 @@ curl -X POST http://localhost:8000/api/consulta \
   },
   "resumo": "Foram encontradas 2 terras indigenas no municipio de Ubatuba.",
   "estatisticas": {"total": 2},
+  "nota_risco": 7.4,
   "fontes": [{"nome": "FUNAI", "identificador": "funai"}],
   "geojson": {
     "type": "FeatureCollection",
     "features": [...]
   },
+  "qgis_url": "http://localhost:8000/api/geo/terras_indigenas?municipio=Ubatuba",
+  "exportacao_relatorio": {...},
   "total_resultados": 2,
   "tempo_processamento_ms": 88.1
 }
 ```
 
-### Integração com QGIS
+---
+
+## Autenticação
+
+O sistema utiliza **JWT (JSON Web Token)** para autenticação. Todos os endpoints de dados exigem o header `Authorization: Bearer <token>`.
+
+### Endpoints de Autenticação
+
+| Método | Rota | Descrição | Auth |
+|--------|------|-----------|------|
+| `POST` | `/api/v1/auth/login` | Login com e-mail e senha | Não |
+| `POST` | `/api/v1/auth/cadastro` | Cria novo usuário | Admin |
+| `POST` | `/api/v1/auth/alterar-senha` | Altera a própria senha | Sim |
+| `GET` | `/api/v1/auth/usuarios` | Lista todos os usuários | Admin |
+| `PUT` | `/api/v1/auth/usuarios/{id}` | Edita dados de um usuário | Sim* |
+| `DELETE` | `/api/v1/auth/usuarios/{id}` | Exclui usuário | Admin |
+| `POST` | `/api/v1/auth/esqueci-senha` | Envia link de redefinição por e-mail | Não |
+| `POST` | `/api/v1/auth/redefinir-senha` | Redefine a senha via token do e-mail | Não |
+
+> `*` ADMIN pode editar qualquer usuário; USER só pode editar a si mesmo.
+
+### Papéis
+
+| Papel | Permissões |
+|-------|-----------|
+| `ADMIN` | Acesso total: cadastro, exclusão, listagem de usuários, ETL, histórico de todos |
+| `USER` | Consultas, histórico próprio, edição do próprio perfil |
+
+### Recuperação de Senha
+
+O fluxo de "Esqueci minha senha" envia um link por e-mail com token JWT de uso único (válido por 15 minutos). O token nunca revela se o e-mail está ou não cadastrado no sistema.
+
+```bash
+# 1. Solicitar link de redefinição
+POST /api/v1/auth/esqueci-senha
+{ "email": "usuario@empresa.com" }
+
+# 2. Clicar no link recebido por e-mail e enviar nova senha
+POST /api/v1/auth/redefinir-senha
+{ "token": "<token_do_email>", "nova_senha": "NovaSenha@123" }
+```
+
+Variáveis de ambiente necessárias para envio de e-mail:
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=seu_email@gmail.com
+SMTP_PASSWORD=sua_senha_de_app
+FRONTEND_URL=http://localhost:3000
+```
+
+---
+
+## Histórico de Conversas
+
+O sistema persiste automaticamente cada conversa do usuário no banco de dados, permitindo retomar o contexto de consultas anteriores.
+
+### Estrutura
+
+- **Conversa**: agrupamento de mensagens com título gerado automaticamente pela primeira pergunta
+- **Mensagem**: cada turno (usuário ou sistema), com timestamp
+- **MensagemDados**: dados geoespaciais associados à resposta (GeoJSON, estatísticas, nota de risco)
+
+### Endpoints
+
+```bash
+# Listar conversas do usuário
+GET /api/historico
+
+# Obter mensagens de uma conversa (com dados GeoJSON embutidos)
+GET /api/historico/{conversa_id}
+
+# Excluir uma conversa
+DELETE /api/historico/{conversa_id}
+
+# [ADMIN] Listar histórico de todos os usuários
+GET /api/historico/todos
+```
+
+---
+
+## Dashboard
+
+O dashboard agrega os dados ambientais do Estado de SP para visualização gerencial.
+
+### Endpoints
+
+```bash
+# Dashboard completo (único endpoint)
+GET /api/dashboard
+
+# Apenas métricas gerais
+GET /api/dashboard/metricas
+
+# Dados por município (limite configurável, padrão 20)
+GET /api/dashboard/municipios?limite=20
+
+# Dados por ano
+GET /api/dashboard/anos
+```
+
+### Métricas Disponíveis
+
+- Total de propriedades rurais cadastradas (SICAR)
+- Média de risco de fogo
+- Totais de queimadas, alertas de desmatamento, UCs, terras indígenas, quilombolas
+- Área total de propriedades (hectares) e área desmatada (km²)
+- Dados temporais: queimadas e desmatamento por ano
+- Dados geográficos: ranking de municípios por ocorrências
+
+---
+
+## Nota de Risco ASG
+
+Cada resposta de consulta inclui uma **nota de risco ASG** calculada pelo método **AHP (Analytic Hierarchy Process)**, que pondera múltiplos critérios ambientais, sociais e de governança:
+
+| Critério | Peso | Descrição |
+|----------|------|-----------|
+| Queimadas | Alto | Focos de incêndio próximos ao imóvel |
+| Desmatamento | Alto | Alertas DETER/PRODES na região |
+| Unidades de Conservação | Médio | Sobreposição com UCs |
+| Terras Indígenas | Médio | Sobreposição com TIs |
+| Comunidades Quilombolas | Médio | Proximidade com comunidades certificadas |
+| Imóvel Rural (CAR) | Baixo | Regularidade no cadastro |
+
+A nota varia de **0 a 10** (quanto maior, maior o risco socioambiental). Respostas agrupam os resultados por tipo de dado para facilitar a análise.
+
+---
+
+## Relatório PDF
+
+O sistema gera relatórios ASG em PDF para imóveis rurais, consolidando todos os dados encontrados em um documento estruturado.
+
+```bash
+# Exportar relatório de uma consulta em PDF
+POST /api/fazenda/relatorio
+{ "car": "SP-3509502-...", "pergunta": "Situação ambiental da fazenda" }
+```
+
+O relatório inclui:
+- Mapa com geometria do imóvel e ocorrências ao redor
+- Nota de risco ASG com detalhamento por critério
+- Tabelas de queimadas, desmatamento, UCs e TIs próximas
+- Fontes dos dados com rastreabilidade
+
+---
+
+## Imagens de Satélite Sentinel-2
+
+Para cada foco de queimada, é possível obter uma imagem de satélite recortada do **Sentinel-2 (L2A)** via Microsoft Planetary Computer.
+
+```bash
+# Obter imagem de satélite de um foco de queimada
+GET /api/dados/queimadas/{id}/imagem-satelite
+
+# Forçar lat/lon/data (sobrescreve banco)
+GET /api/dados/queimadas/{id}/imagem-satelite?lat=-22.9&lon=-47.1&data=2025-03-01
+```
+
+**Funcionamento**:
+1. Busca coordenadas e data no banco pelo `id`
+2. Verifica cache em disco (`static/sentinel_cache/`)
+3. Se sem cache: busca no Planetary Computer (±10 dias, cobertura de nuvem < 80%), recorta ~3 km ao redor do ponto e normaliza a imagem
+4. Retorna PNG via `StreamingResponse` com header `X-Cache: HIT|MISS`
+
+---
+
+## Integração com QGIS
+
+O sistema exporta dados GeoJSON prontos para visualização no QGIS. Cada resposta de consulta já inclui a `qgis_url` correspondente.
+
+### Via URL direta
 
 1. Abrir QGIS
 2. Layer > Add Layer > Add Vector Layer
 3. Protocol: HTTP(S)
 4. URI: `http://localhost:8000/api/geo/queimadas`
 5. Os dados aparecem no mapa com geometrias corretas (EPSG:4674/SIRGAS 2000)
+
+### Camadas disponíveis para exportação
+
+| Camada | URL |
+|--------|-----|
+| Queimadas | `/api/geo/queimadas` |
+| Terras Indígenas | `/api/geo/terras_indigenas` |
+| Desmatamento (DETER) | `/api/geo/desmatamento` |
+| Desmatamento (PRODES) | `/api/geo/prodes` |
+| Quilombolas | `/api/geo/quilombolas` |
 
 ---
 
@@ -397,7 +631,17 @@ setx PATH "$env:PATH;C:\Program Files\Tesseract-OCR"
 cp .env.example .env
 ```
 
-Edite `.env` com as credenciais do banco
+Edite `.env` com as credenciais do banco e configurações de e-mail:
+
+```env
+DATABASE_URL=postgresql://user:pass@localhost:5433/asg_db
+SECRET_KEY=sua_chave_secreta_jwt
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=seu_email@gmail.com
+SMTP_PASSWORD=sua_senha_de_app
+FRONTEND_URL=http://localhost:3000
+```
 
 ### 2. Instalar Dependências
 
@@ -458,6 +702,8 @@ uvicorn asg_sistema.api.app:app --reload
 
 API disponível em: **http://127.0.0.1:8000**
 
+Documentação interativa: **http://127.0.0.1:8000/docs**
+
 ---
 
 ## Tecnologias Utilizadas
@@ -466,6 +712,7 @@ API disponível em: **http://127.0.0.1:8000**
 |--------|-----------|--------|--------|
 | **Linguagem** | Python | 3.13 | Toda a aplicação |
 | **API** | FastAPI | 0.115+ | REST API |
+| **Autenticação** | python-jose / passlib | — | JWT, hash de senhas |
 | **Agendamento** | APScheduler | 3.x | Cron jobs para ETL automático |
 | **Banco** | PostgreSQL | 16 | Armazenamento principal |
 | **Geoespacial** | PostGIS | 3.4 | Geometrias, consultas espaciais |
@@ -478,6 +725,8 @@ API disponível em: **http://127.0.0.1:8000**
 | **Driver** | psycopg2 | 2.9+ | Driver PostgreSQL |
 | **Geo** | GeoPandas | 1.0+ | Leitura de shapefiles (UCs) |
 | **SICAR** | SICAR (lib) | — | Download shapefile CAR com OCR |
+| **PDF** | WeasyPrint / Jinja2 | — | Geração de relatórios PDF |
+| **Satélite** | pystac-client / rasterio | — | Imagens Sentinel-2 via Planetary Computer |
 | **Infra** | Docker | 24+ | Container do banco |
+| **CI/CD** | GitHub Actions + AWS ECS | — | Deploy automático |
 | **Dados** | GeoJSON | RFC 7946 | Formato de intercâmbio geoespacial |
-
