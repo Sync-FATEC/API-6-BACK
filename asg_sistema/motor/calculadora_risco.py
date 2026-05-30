@@ -240,28 +240,7 @@ def calcular_score_ahp(cruzamento: dict, area_fazenda_km2: float) -> dict:
     # Score final: soma ponderada (cada sub × peso_AHP) × 100
     score = sum(sub_scores_raw[c] * pesos[c] for c in CRITERIOS_ASG) * 100
 
-    penalidade = 1.0
-
-    # Sobreposição com TI = MUITO grave
-    if sub_scores_raw["terras_indigenas"] >= 0.85:
-        penalidade += 0.35
-
-    # PRODES dentro do imóvel
-    if sub_scores_raw["desmatamento_prodes"] >= 0.7:
-        penalidade += 0.25
-
-    # DETER recente
-    if sub_scores_raw["desmatamento_deter"] >= 0.6:
-        penalidade += 0.20
-
-    # Combinação crítica
-    if (
-        sub_scores_raw["terras_indigenas"] >= 0.85
-        and sub_scores_raw["desmatamento_prodes"] >= 0.6
-    ):
-        penalidade += 0.30
-
-    score *= penalidade
+    # Aplicar limitação de score máximo primeiro
     score = min(score, 100)
 
     nota = round(score)
@@ -289,7 +268,7 @@ def calcular_score_ahp(cruzamento: dict, area_fazenda_km2: float) -> dict:
     sub_scores_pct = {c: round(sub_scores_raw[c] * 100, 1) for c in CRITERIOS_ASG}
 
     return {
-        "nota": nota,
+       "nota": nota,
         "nivel": nivel,
         "fatores": fatores_todos,
         "por_dimensao": por_dimensao,

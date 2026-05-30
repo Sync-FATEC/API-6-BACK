@@ -84,12 +84,12 @@ def _gerar_imagem_sentinel(lat: float, lon: float, data_hora: datetime) -> bytes
     )
 
     search = catalog.search(
-        collections=["sentinel-2-l2a"],
-        bbox=bbox,
-        datetime=intervalo,
-        query={"eo:cloud_cover": {"lt": 80}},
-        limit=20,
-    )
+    collections=["sentinel-2-l2a"],
+    bbox=bbox,
+    datetime=intervalo,
+    query={"eo:cloud_cover": {"lt": 50}},
+    limit=5,
+)
 
     items = list(search.items())
 

@@ -1,13 +1,14 @@
 """
 Serviço de atualização da base ASG.
 
-Agendamento dispara POST /api/etl/executar para reutilizar a lógica já existente.
+Agendamento dispara o script ETL diretamente via subprocess.
 """
 
 import asyncio
 import logging
-import httpx
+import subprocess
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,7 @@ from asg_sistema.db.models import AgendamentoAtualizacao
 logger = logging.getLogger(__name__)
 MAX_TENTATIVAS_RETRY = max(1, int(config.etl_retry_max_tentativas))
 INTERVALO_RETRY = max(1, int(config.etl_retry_intervalo_erro_api_segundos))
-API_URL_ETL_EXECUTAR = "http://localhost:8000/api/etl/executar"
+
 
 def _atualizar_status_agendamento(
     agendamento: AgendamentoAtualizacao,
@@ -34,14 +35,38 @@ def _atualizar_status_agendamento(
 
 
 async def _disparar_etl(etapa: str = "full") -> dict:
-    """Dispara uma única tentativa de POST /api/etl/executar."""
-    async with httpx.AsyncClient(timeout=3600) as client:
-        response = await client.post(
-            API_URL_ETL_EXECUTAR,
-            params={"skip_sicar": True, "etapa": etapa},
-        )
-        response.raise_for_status()
-        return response.json()
+    """Dispara o script ETL diretamente via subprocess."""
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    script_etl = repo_root / "scripts" / "etl_pipeline.py"
+    
+    if not script_etl.exists():
+        raise FileNotFoundError(f"Script ETL não encontrado em: {script_etl}")
+    
+    logger.info("[ETL] Iniciando subprocess: python %s --etapa %s", script_etl, etapa)
+    
+    # Define arquivo de log para o ETL
+    log_dir = repo_root / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_arquivo = log_dir / f"etl_agendado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    
+    # Executa o script ETL diretamente
+    process = await asyncio.create_subprocess_exec(
+        "python", str(script_etl),
+        "--etapa", etapa,
+        "--entidades", "tudo",
+        "--log-file", str(log_arquivo),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    
+    stdout, stderr = await process.communicate()
+    
+    if process.returncode != 0:
+        error_msg = stderr.decode() if stderr else "Erro desconhecido"
+        raise RuntimeError(f"ETL falhou com código {process.returncode}: {error_msg}")
+    
+    logger.info("[ETL] Script finalizado com sucesso (código 0)")
+    return {"status": "sucesso", "etapa": etapa}
 
 
 def _agendar_nova_tentativa_async(agendamento_id: int, proxima_tentativa: int, intervalo_segundos: int) -> None:
@@ -68,24 +93,27 @@ async def executar_atualizacao_completa(agendamento_id: int, tentativa_atual: in
     intervalo = INTERVALO_RETRY
 
     try:
+        logger.info("[AGENDAMENTO] Iniciando executar_atualizacao_completa(id=%d, tentativa=%d)", agendamento_id, tentativa_atual)
+        
         agendamento = db.get(AgendamentoAtualizacao, agendamento_id)
         if not agendamento:
-            logger.warning("Agendamento id=%d não encontrado.", agendamento_id)
+            logger.warning("[AGENDAMENTO] Agendamento id=%d não encontrado no banco.", agendamento_id)
             return
 
         db.commit()
 
         logger.info(
-            "=== Agendamento id=%d iniciado (tentativa %d/%d, etapa=%s) ===",
+            "[AGENDAMENTO] id=%d iniciado (tentativa %d/%d, etapa=%s)",
             agendamento_id,
             tentativa_atual,
             max_tentativas_retry,
             agendamento.etapa,
         )
 
-        # Dispara POST /api/etl/executar com a etapa do agendamento
+        # Dispara o script ETL diretamente com a etapa do agendamento
+        logger.info("[AGENDAMENTO] id=%d chamando ETL com etapa=%s", agendamento_id, agendamento.etapa)
         resultado = await _disparar_etl(etapa=agendamento.etapa)
-        logger.info("[ETL] Resposta da API: %s", resultado)
+        logger.info("[AGENDAMENTO] id=%d resposta da API: %s", agendamento_id, resultado)
 
         # Se chegou aqui, sucesso!
         _atualizar_status_agendamento(
@@ -95,9 +123,11 @@ async def executar_atualizacao_completa(agendamento_id: int, tentativa_atual: in
             atualizar_execucao=True,
         )
         db.commit()
-        logger.info("=== Agendamento id=%d finalizado: SUCESSO ===", agendamento_id)
+        logger.info("[AGENDAMENTO] id=%d finalizado: SUCESSO ✓", agendamento_id)
 
     except Exception as e:
+        logger.error("[AGENDAMENTO] id=%d erro na tentativa %d: %s", agendamento_id, tentativa_atual, type(e).__name__, exc_info=True)
+        
         if tentativa_atual < max_tentativas_retry:
             proxima_tentativa = tentativa_atual + 1
     
@@ -108,11 +138,11 @@ async def executar_atualizacao_completa(agendamento_id: int, tentativa_atual: in
             )
 
             logger.warning(
-                "[ETL] Tentativa %d/%d falhou para agendamento id=%d. "
-                "Nova tentativa assíncrona em %ds. Erro: %s",
+                "[AGENDAMENTO] id=%d tentativa %d/%d falhou. "
+                "Agendando retry em %ds. Erro: %s",
+                agendamento_id,
                 tentativa_atual,
                 max_tentativas_retry,
-                agendamento_id,
                 intervalo,
                 str(e)[:200],
             )
@@ -125,15 +155,16 @@ async def executar_atualizacao_completa(agendamento_id: int, tentativa_atual: in
                         ultimo_status="retry_agendado",
                         ultima_mensagem=(
                             f"Tentativa {tentativa_atual}/{max_tentativas_retry} falhou. "
-                            f"Nova tentativa em {intervalo}s."
+                            f"Retry em {intervalo}s."
                         ),
                     )
                     db.commit()
+                    logger.info("[AGENDAMENTO] id=%d status atualizado para retry_agendado", agendamento_id)
             except Exception as db_error:
-                logger.error("Erro ao atualizar status de retry do agendamento: %s", db_error)
+                logger.error("[AGENDAMENTO] id=%d erro ao atualizar status de retry: %s", agendamento_id, db_error)
             return
 
-        logger.exception("Falha no agendamento id=%d: %s", agendamento_id, e)
+        logger.error("[AGENDAMENTO] id=%d FALHA FINAL após %d tentativas: %s", agendamento_id, max_tentativas_retry, e)
         if db:
             try:
                 agendamento = db.get(AgendamentoAtualizacao, agendamento_id)
@@ -141,12 +172,14 @@ async def executar_atualizacao_completa(agendamento_id: int, tentativa_atual: in
                     _atualizar_status_agendamento(
                         agendamento,
                         ultimo_status="erro",
-                        ultima_mensagem=f"Erro: {str(e)[:200]}",
+                        ultima_mensagem=f"Erro após {max_tentativas_retry} tentativas: {str(e)[:200]}",
                         atualizar_execucao=True,
                     )
                     db.commit()
+                    logger.info("[AGENDAMENTO] id=%d status atualizado para erro", agendamento_id)
             except Exception as db_error:
-                logger.error("Erro ao atualizar status do agendamento: %s", db_error)
+                logger.error("[AGENDAMENTO] id=%d erro ao atualizar status final: %s", agendamento_id, db_error)
     finally:
+        logger.info("[AGENDAMENTO] id=%d finalizando (fechando sessão do DB)", agendamento_id)
         if db:
             db.close()

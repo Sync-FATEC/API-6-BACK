@@ -131,3 +131,4 @@ def obter_info_ahp() -> dict:
             "PRODES (histórico) e Contexto Municipal (UCs, fator indireto)."
         ),
     }
+

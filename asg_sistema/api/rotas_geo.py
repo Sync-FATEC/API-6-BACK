@@ -101,21 +101,6 @@ _LIMITES_BASE = {
 
 CATALOGO_CAMADAS = [
     {
-        "id": "consulta",
-        "nome": "Consulta livre (texto)",
-        "fonte": "Multi-fonte",
-        "geometria": "Geometry",
-        "srid": 4326,
-        "atributos": ["fonte", "..."],
-        "filtros": ["pergunta", "cod_imovel"],
-        "limites": {},
-        "url": "/geo/consulta",
-        "descricao": (
-            "Retorna exatamente o mesmo geojson que o chat exibe no mapa. "
-            "Use o filtro `pergunta=` para descrever a consulta em linguagem natural."
-        ),
-    },
-    {
         "id": "queimadas",
         "nome": "Focos de Queimadas (INPE)",
         "fonte": "INPE",
@@ -187,22 +172,6 @@ CATALOGO_CAMADAS = [
         },
         "url": "/geo/sicar",
         "descricao": "Cadastro Ambiental Rural - imoveis rurais com geometrias.",
-    },
-    {
-        "id": "imovel",
-        "nome": "Imovel + Ameacas (cruzamento)",
-        "fonte": "SICAR + cruzamento",
-        "geometria": "Geometry",
-        "srid": 4326,
-        "atributos": ["cod_imovel", "fonte", "classe", "data_avistamento", "frp", "ano"],
-        "filtros": ["cod_imovel"],
-        "limites": {},
-        "url": "/geo/imovel",
-        "descricao": (
-            "Camada combinada do imovel SICAR com queimadas, DETER e PRODES "
-            "em raio configuravel (padrao 5km). Use para abrir no QGIS a mesma "
-            "visao do cruzamento exibida no chat por codigo CAR."
-        ),
     },
     {
         "id": "unidades_conservacao",
