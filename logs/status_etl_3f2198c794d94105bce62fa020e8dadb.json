@@ -1,0 +1,128 @@
+{
+  "execution_id": "3f2198c794d94105bce62fa020e8dadb",
+  "pipeline": "ETL ASG-SP",
+  "inicio": "2026-05-25T23:05:02.218854",
+  "atualizado_em": "2026-05-25T23:05:55.740098",
+  "etapa_atual": "concluido",
+  "status_execucao": "falha",
+  "finalizado": true,
+  "mensagem": "Pipeline finalizado com falha definitiva.",
+  "etapas": [
+    {
+      "etapa": "extract",
+      "status": "parcial",
+      "registros": 0,
+      "duracao_segundos": 1.3,
+      "timestamp": "2026-05-25T23:05:03.526041"
+    },
+    {
+      "etapa": "transform_load",
+      "status": "sucesso",
+      "registros": 228816,
+      "duracao_segundos": 0.9,
+      "timestamp": "2026-05-25T23:05:04.390770"
+    },
+    {
+      "etapa": "vetorizacao",
+      "status": "sucesso",
+      "registros": 4302,
+      "duracao_segundos": 51.3,
+      "timestamp": "2026-05-25T23:05:55.649719"
+    },
+    {
+      "etapa": "validacao",
+      "status": "sucesso",
+      "registros": 0,
+      "duracao_segundos": 0.1,
+      "timestamp": "2026-05-25T23:05:55.733496"
+    }
+  ],
+  "erros": [
+    {
+      "etapa": "extract:FUNAI - Terras Indígenas",
+      "erro": "FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "timestamp": "2026-05-25T23:05:03.525520"
+    }
+  ],
+  "fontes": [
+    {
+      "fonte": "FUNAI - Terras Indígenas",
+      "status": "FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "registros": 0,
+      "duracao_segundos": 1.2,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    }
+  ],
+  "eventos": [
+    {
+      "timestamp": "2026-05-25T23:05:02.219184",
+      "tipo": "pipeline_iniciado",
+      "mensagem": "Pipeline ETL iniciado."
+    },
+    {
+      "timestamp": "2026-05-25T23:05:02.219429",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa EXTRACT.",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:03.525565",
+      "tipo": "erro",
+      "mensagem": "Erro na etapa 'extract:FUNAI - Terras Indígenas': FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "etapa": "extract:FUNAI - Terras Indígenas"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:03.525833",
+      "tipo": "extract_parcial",
+      "mensagem": "Extract finalizado com erro definitivo em 1 base(s).",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:03.526220",
+      "tipo": "extract_com_falhas",
+      "mensagem": "Extract retornou falhas e o pipeline seguira com os dados disponiveis.",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:03.526482",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa TRANSFORM + LOAD.",
+      "etapa": "transform_load"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:04.389869",
+      "tipo": "transform_load_sucesso",
+      "mensagem": "Transform+Load concluido com sucesso.",
+      "etapa": "transform_load"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:04.392549",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa EMBED.",
+      "etapa": "vetorizacao"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:55.648166",
+      "tipo": "vetorizacao_sucesso",
+      "mensagem": "Etapa EMBED concluida com sucesso.",
+      "etapa": "vetorizacao"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:55.652349",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa VALIDACAO.",
+      "etapa": "validacao"
+    },
+    {
+      "timestamp": "2026-05-25T23:05:55.732340",
+      "tipo": "validacao_concluida",
+      "mensagem": "Etapa de validacao finalizada.",
+      "etapa": "validacao"
+    }
+  ],
+  "fim": "2026-05-25T23:05:55.734840",
+  "duracao_total_segundos": 53.5
+}

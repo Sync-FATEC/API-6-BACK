@@ -1,0 +1,170 @@
+{
+  "execution_id": "76f070a5ef6942118a6d90ed09cc5cdc",
+  "pipeline": "ETL ASG-SP",
+  "inicio": "2026-05-26T01:40:00.160817",
+  "atualizado_em": "2026-05-26T01:41:28.931989",
+  "etapa_atual": "concluido",
+  "status_execucao": "falha",
+  "finalizado": true,
+  "mensagem": "Pipeline finalizado com falha definitiva.",
+  "etapas": [
+    {
+      "etapa": "extract",
+      "status": "parcial",
+      "registros": 58709,
+      "duracao_segundos": 82.1,
+      "timestamp": "2026-05-26T01:41:22.222250"
+    }
+  ],
+  "erros": [
+    {
+      "etapa": "extract:FUNAI - Terras Indígenas",
+      "erro": "FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "timestamp": "2026-05-26T01:41:22.220277"
+    },
+    {
+      "etapa": "transform_load",
+      "erro": "Extra data: line 7006761 column 2 (char 153430025)",
+      "timestamp": "2026-05-26T01:41:28.884709"
+    }
+  ],
+  "fontes": [
+    {
+      "fonte": "FUNAI - Terras Indígenas",
+      "status": "FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "registros": 0,
+      "duracao_segundos": 1.3,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "INPE/DETER - Desmatamento Cerrado",
+      "status": "OK",
+      "registros": 36,
+      "duracao_segundos": 0.4,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "INPE/DETER - Desmatamento Amazônia",
+      "status": "OK",
+      "registros": 0,
+      "duracao_segundos": 1.8,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "INPE/PRODES - Desmatamento Anual",
+      "status": "OK",
+      "registros": 50000,
+      "duracao_segundos": 15.8,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "INPE/Queimadas - Focos de Incêndio",
+      "status": "OK",
+      "registros": 8579,
+      "duracao_segundos": 9.4,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "MMA/ICMBio - Unidades de Conservação",
+      "status": "OK",
+      "registros": 42,
+      "duracao_segundos": 50.6,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "SICAR - Cadastro Ambiental Rural",
+      "status": "OK",
+      "registros": 0,
+      "duracao_segundos": 0.7,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "Palmares - Comunidades Quilombolas",
+      "status": "OK",
+      "registros": 52,
+      "duracao_segundos": 1.8,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    }
+  ],
+  "eventos": [
+    {
+      "timestamp": "2026-05-26T01:40:00.162744",
+      "tipo": "pipeline_iniciado",
+      "mensagem": "Pipeline ETL iniciado."
+    },
+    {
+      "timestamp": "2026-05-26T01:40:00.163362",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa EXTRACT.",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-26T01:41:22.220449",
+      "tipo": "erro",
+      "mensagem": "Erro na etapa 'extract:FUNAI - Terras Indígenas': FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "etapa": "extract:FUNAI - Terras Indígenas"
+    },
+    {
+      "timestamp": "2026-05-26T01:41:22.221314",
+      "tipo": "extract_parcial",
+      "mensagem": "Extract finalizado com erro definitivo em 1 base(s).",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-26T01:41:22.222847",
+      "tipo": "extract_com_falhas",
+      "mensagem": "Extract retornou falhas e o pipeline seguira com os dados disponiveis.",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-26T01:41:22.223632",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa TRANSFORM + LOAD.",
+      "etapa": "transform_load"
+    },
+    {
+      "timestamp": "2026-05-26T01:41:28.885133",
+      "tipo": "erro",
+      "mensagem": "Erro na etapa 'transform_load': Extra data: line 7006761 column 2 (char 153430025)",
+      "etapa": "transform_load"
+    },
+    {
+      "timestamp": "2026-05-26T01:41:28.886175",
+      "tipo": "transform_load_erro",
+      "mensagem": "Falha no transform+load: Extra data: line 7006761 column 2 (char 153430025)",
+      "etapa": "transform_load"
+    },
+    {
+      "timestamp": "2026-05-26T01:41:28.930296",
+      "tipo": "pipeline_abortado",
+      "mensagem": "Pipeline abortado por falha definitiva no transform+load.",
+      "etapa": "transform_load"
+    }
+  ],
+  "fim": "2026-05-26T01:41:28.930620",
+  "duracao_total_segundos": 88.8
+}
