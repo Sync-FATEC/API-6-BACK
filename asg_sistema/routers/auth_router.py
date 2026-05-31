@@ -234,7 +234,7 @@ def esqueci_senha(payload: EsqueciSenhaRequest, db: Session = Depends(obter_sess
 
     if usuario:
         token = jwt_tokens.criar_token_reset(email)
-        link = f"{config.frontend_url}/redefinir-senha?token={token}"
+        link = f"{config.get_frontend_url()}/redefinir-senha?token={token}"
         try:
             enviar_email_reset_senha(email, link)
         except RuntimeError as e:

@@ -31,6 +31,8 @@ services:
       ASG_DB_USUARIO: asg_user
       ASG_DB_SENHA: asg_pass
       ASG_ENV: development
+      EMAIL_USER: syncfatec6@gmail.com
+      EMAIL_PASS: hpvx katu fqqg dals
     depends_on:
       db:
         condition: service_healthy
