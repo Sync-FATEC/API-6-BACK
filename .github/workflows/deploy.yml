@@ -3,7 +3,7 @@ name: Deploy ECS
 on:
   push:
     branches:
-      - dev
+      - main
 
 jobs:
   deploy:
