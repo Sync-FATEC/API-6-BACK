@@ -86,13 +86,7 @@ app.include_router(auth_router, prefix="/api/v1")
 
 @app.get("/api/saude")
 def saude():
-    from asg_sistema.db import repositorio
-    try:
-        contagens = repositorio.contar_por_tabela()
-        return {"status": "ok", "contagens": contagens}
-    except Exception as e:
-        return {"status": "erro", "detalhe": str(e)}
-
+    return {"status": "ok"}
 
 def _entrada_historico_etl_valida(reg: dict) -> bool:
     """Descarta duplicata antiga: registro vazio com sucesso=true (bug do main() + salvar extra)."""
