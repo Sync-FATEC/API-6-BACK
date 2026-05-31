@@ -48,8 +48,22 @@ class Configuracao(BaseSettings):
     # ===========================================================
     email_remetente: str | None = None
     email_senha_app: str | None = None
-    # URL base do frontend — usada no link de redefinição de senha enviado por e-mail
-    frontend_url: str = "http://localhost:3000"
+    # URL base da API em produção — usada para gerar qgis_url nas respostas
+    api_url_production: str = "http://asg-backend-alb-85114170.us-east-1.elb.amazonaws.com"
+    # URL base do frontend em produção — usada no link de redefinição de senha enviado por e-mail
+    frontend_url_production: str = "https://asg-visiona.vercel.app"
+
+    def get_api_url(self) -> str:
+        """Retorna a URL base da API baseado no ambiente."""
+        if self.env == "production":
+            return self.api_url_production
+        return "http://localhost:8000"
+
+    def get_frontend_url(self) -> str:
+        """Retorna a URL base do frontend baseado no ambiente."""
+        if self.env == "production":
+            return self.frontend_url_production
+        return "http://localhost:3000"
 
     @field_validator("jwt_segredo")
     @classmethod
@@ -68,10 +82,12 @@ class Configuracao(BaseSettings):
 
     @property
     def db_url(self) -> str:
+        ssl = "sslmode=require&" if self.env == "production" else ""
+
         return (
             f"postgresql://{self.db_usuario}:{self.db_senha}"
             f"@{self.db_host}:{self.db_port}/{self.db_nome}"
-            f"?client_encoding=utf8"
+            f"?{ssl}client_encoding=utf8"
         )
 
     @property

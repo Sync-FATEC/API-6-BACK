@@ -90,6 +90,8 @@ def _injetar_qgis_url(
     entidades_base: dict,
     pergunta_fallback: str = "",
 ) -> None:
+    from asg_sistema.config import Configuracao
+    
     pergunta = resposta.get("pergunta") or pergunta_fallback
     if not pergunta:
         return
@@ -100,9 +102,11 @@ def _injetar_qgis_url(
         for k, v in entidades_resposta.items():
             entidades.setdefault(k, v)
 
+    config = Configuracao()
     url = construir_qgis_url(
         plano.intencao_principal,
         entidades,
+        base_url=config.get_api_url(),
         pergunta=pergunta,
     )
     if url:
