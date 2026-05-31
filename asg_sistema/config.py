@@ -82,12 +82,10 @@ class Configuracao(BaseSettings):
 
     @property
     def db_url(self) -> str:
-        ssl = "sslmode=require&" if self.env == "production" else ""
-
         return (
             f"postgresql://{self.db_usuario}:{self.db_senha}"
             f"@{self.db_host}:{self.db_port}/{self.db_nome}"
-            f"?{ssl}client_encoding=utf8"
+            f"?client_encoding=utf8"
         )
 
     @property
