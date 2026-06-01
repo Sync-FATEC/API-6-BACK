@@ -1,0 +1,26 @@
+{
+  "execution_id": "f14acf1c512e41f7a6de52dbf5c87baa",
+  "pipeline": "ETL ASG-SP",
+  "inicio": "2026-05-03T22:02:49.415271",
+  "atualizado_em": "2026-05-03T22:02:49.415873",
+  "etapa_atual": "extract",
+  "status_execucao": "em_andamento",
+  "finalizado": false,
+  "mensagem": "Iniciando etapa EXTRACT.",
+  "etapas": [],
+  "erros": [],
+  "fontes": [],
+  "eventos": [
+    {
+      "timestamp": "2026-05-03T22:02:49.415630",
+      "tipo": "pipeline_iniciado",
+      "mensagem": "Pipeline ETL iniciado."
+    },
+    {
+      "timestamp": "2026-05-03T22:02:49.415871",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa EXTRACT.",
+      "etapa": "extract"
+    }
+  ]
+}

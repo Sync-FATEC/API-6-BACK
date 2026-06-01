@@ -1,6 +1,5 @@
 """
 Ponto de entrada do backend ASG.
-Responsável pelo agendamento de atualização da base de dados.
 
 Para rodar:
     python -m uvicorn main:app --reload --port 8001
@@ -21,17 +20,19 @@ from asg_sistema.scheduler.gerenciador import (
     registrar_job,
 )
 from asg_sistema.routers.agendamento_router import router as agendamento_router
+from asg_sistema.routers.auth_router import router as auth_router
+from asg_sistema.routers.conversa_router import router_conversas, router_mensagens
+from asg_sistema.api.rotas_consulta import router as consulta_router
+from asg_sistema.api import rotas_banco, rotas_dados, rotas_fazenda, rotas_geo, rotas_historico, rotas_pipeline, rotas_dashboard, rotas_sentinel
 
-# Cria a tabela de agendamentos se ainda não existir
+# Cria todas as tabelas (modelos SQLAlchemy) se ainda não existirem
 Base.metadata.create_all(bind=engine)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Inicia o scheduler
     iniciar_scheduler()
 
-    # Recarrega agendamentos ativos após reinício
     db = SessionLocal()
     try:
         agendamentos_ativos = (
@@ -51,7 +52,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ASG SP - Backend",
-    description="Backend de agendamento e atualização da base de dados ASG.",
+    description="Backend de agendamento, consulta e histórico de conversas do sistema ASG.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -64,6 +65,18 @@ app.add_middleware(
 )
 
 app.include_router(agendamento_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(consulta_router, prefix="/api/v1")
+app.include_router(router_conversas, prefix="/api/v1")
+app.include_router(router_mensagens, prefix="/api/v1")
+app.include_router(rotas_historico.router, prefix="/api", tags=["Histórico"])
+app.include_router(rotas_banco.router, prefix="/api", tags=["Banco de dados"])
+app.include_router(rotas_dados.router, prefix="/api/dados", tags=["Dados"])
+app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
+app.include_router(rotas_fazenda.router, prefix="/api/fazenda", tags=["Fazenda"])
+app.include_router(rotas_pipeline.router, prefix="/api/etl", tags=["Pipeline ETL"])
+app.include_router(rotas_dashboard.router, prefix="/api", tags=["Dashboard"])
+app.include_router(rotas_sentinel.router, prefix="/api/dados", tags=["Sentinel-2"])
 
 
 @app.get("/api/saude")

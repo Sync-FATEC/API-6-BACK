@@ -38,12 +38,12 @@ CRITERIOS_ASG = [
 #
 #                    Q     D     T     QL    P     C
 MATRIZ_COMPARACAO = [
-    [1.0,  1.0,  2.0,  2.0,  3.0,  5.0],   # Queimadas (Q)
-    [1.0,  1.0,  2.0,  2.0,  3.0,  5.0],   # DETER (D)
-    [0.5,  0.5,  1.0,  2.0,  2.0,  4.0],   # TI (T)
-    [0.5,  0.5,  0.5,  1.0,  2.0,  4.0],   # Quilombolas (QL)
-    [1/3,  1/3,  0.5,  0.5,  1.0,  3.0],   # PRODES (P)
-    [0.2,  0.2,  0.25, 0.25, 1/3,  1.0],   # Contexto (C)
+    [1.0,  1.0,  2.0,  2.0,  1.0,  5.0],   # Queimadas
+    [1.0,  1.0,  2.0,  2.0,  1.0,  5.0],   # DETER
+    [0.5,  0.5,  1.0,  2.0,  1.0,  4.0],   # Terras Indígenas
+    [0.5,  0.5,  0.5,  1.0,  0.5,  4.0],   # Quilombolas
+    [1.0,  1.0,  1.0,  2.0,  1.0,  5.0],   # PRODES
+    [0.2,  0.2,  0.25, 0.25, 0.2,  1.0],   # Contexto municipal
 ]
 
 
@@ -131,3 +131,4 @@ def obter_info_ahp() -> dict:
             "PRODES (histórico) e Contexto Municipal (UCs, fator indireto)."
         ),
     }
+

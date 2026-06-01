@@ -195,3 +195,32 @@ CREATE INDEX IF NOT EXISTS idx_corpus_fonte ON corpus_asg(fonte);
 CREATE INDEX IF NOT EXISTS idx_corpus_uf_sigla ON corpus_asg(uf_sigla);
 CREATE INDEX IF NOT EXISTS idx_corpus_municipio ON corpus_asg(municipio);
 CREATE INDEX IF NOT EXISTS idx_corpus_data ON corpus_asg(data_referencia);
+
+-- Usuários da API (autenticação JWT)
+CREATE TABLE IF NOT EXISTS usuarios (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL DEFAULT '',
+    cargo VARCHAR(200) NOT NULL DEFAULT '',
+    email VARCHAR(255) NOT NULL UNIQUE,
+    papel VARCHAR(20) NOT NULL DEFAULT 'USER',
+    senha_hash VARCHAR(255) NOT NULL,
+    criado_em TIMESTAMP DEFAULT NOW(),
+    atualizado_em TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT usuarios_papel_chk CHECK (papel IN ('ADMIN', 'USER'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email);
+
+-- Bancos já existentes (tabela antiga sem nome/cargo/papel)
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nome VARCHAR(255) NOT NULL DEFAULT '';
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cargo VARCHAR(200) NOT NULL DEFAULT '';
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS papel VARCHAR(20) NOT NULL DEFAULT 'USER';
+
+UPDATE usuarios SET papel = 'USER' WHERE papel IS NULL OR papel NOT IN ('ADMIN', 'USER');
+
+DO $$
+BEGIN
+  ALTER TABLE usuarios ADD CONSTRAINT usuarios_papel_chk CHECK (papel IN ('ADMIN', 'USER'));
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;

@@ -67,6 +67,15 @@ _NOMES_INTENCAO = {
     "consultar_menor_risco": "fazenda com menor risco",
 }
 
+_INTENCOES_RESUMO_MUNICIPAL = (
+    "consultar_queimadas",
+    "consultar_desmatamento",
+    "consultar_terra_indigena",
+    "consultar_unidade_conservacao",
+    "consultar_quilombola",
+    "consultar_imovel_rural",
+)
+
 
 def planejar(
     intencao_principal: str,
@@ -101,6 +110,9 @@ def planejar(
     # quando já temos um CAR) × municípios.
     intencoes: list[tuple[str, float]] = [(intencao_principal, confianca_principal)]
     intencoes.extend(intencoes_secundarias)
+
+    if not cod_imovel and intencao_principal == "resumo_municipal" and municipios:
+        intencoes = [(i, confianca_principal) for i in _INTENCOES_RESUMO_MUNICIPAL]
 
     if cod_imovel:
         # Com CAR, a intenção "consultar_imovel_rural" é absorvida pela
@@ -152,10 +164,16 @@ def planejar(
         tem_car=bool(cod_imovel),
     )
 
-    lista_intencoes = [
-        {"intencao": i, "confianca": round(c, 3)}
-        for i, c in [(intencao_principal, confianca_principal)] + list(intencoes_secundarias)
-    ]
+    if not cod_imovel and intencao_principal == "resumo_municipal" and municipios:
+        lista_intencoes = [
+            {"intencao": i, "confianca": round(confianca_principal, 3)}
+            for i in _INTENCOES_RESUMO_MUNICIPAL
+        ]
+    else:
+        lista_intencoes = [
+            {"intencao": i, "confianca": round(c, 3)}
+            for i, c in [(intencao_principal, confianca_principal)] + list(intencoes_secundarias)
+        ]
 
     return ExecutionPlan(
         subconsultas=subs,

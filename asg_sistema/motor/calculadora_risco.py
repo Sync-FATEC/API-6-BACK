@@ -76,7 +76,7 @@ def _sub_score_deter(dados: dict, area_fazenda_km2: float) -> tuple[float, list[
 
 
 def _sub_score_prodes(dados: dict, area_fazenda_km2: float) -> tuple[float, list[str]]:
-    """Sub-score 0-1 para desmatamento histórico PRODES."""
+    """Sub-score 0-1 para desmatamento histórico PRODES — versão mais rigorosa."""
     total = int(dados.get("total_poligonos") or 0)
     area_hist = float(dados.get("area_hist_km2") or 0)
     recentes = int(dados.get("poligonos_recentes") or 0)
@@ -90,25 +90,28 @@ def _sub_score_prodes(dados: dict, area_fazenda_km2: float) -> tuple[float, list
     pct_hist = area_hist / area_fazenda_km2 if area_fazenda_km2 > 0 else 0
     tendencia = recentes / max(antigos, 1)
 
-    # Fator de proximidade: polígonos encostados (<100m) contam forte,
-    # distantes (>5km) não contam. Entre 0-5km decai linearmente.
-    fator_proximidade = max(0.0, min(1.0, 1.0 - dist / 5.0))
+    if area_hist > 0 or dist == 0:
+        sub = 0.80
+        sub += min(pct_hist * 2.5, 0.25)
+        sub += min(total / 20, 0.10)
+        sub = min(1.0, sub)
+    else:
+        fator_proximidade = max(0.0, min(1.0, 1.0 - dist / 5.0))
+        sub = min(1.0, fator_proximidade * 0.45 + min(total / 20, 0.25))
 
-    # Componente por quantidade + proximidade (até 0.4 via densidade)
-    componente_densidade = min(total / 20, 0.4) * fator_proximidade
-
-    sub = min(1.0, pct_hist + min(tendencia / 3, 0.4) + componente_densidade)
+    if tendencia > 1:
+        sub = min(1.0, sub + 0.10)
 
     if area_hist > 0:
         ha = area_hist * 100
-        fatores.append(f"{ha:.2f} ha de desmatamento histórico dentro do imóvel")
+        fatores.append(f"{ha:.2f} ha de desmatamento PRODES dentro do imóvel")
     else:
         fatores.append(f"{total} polígono(s) PRODES a {dist:.2f} km")
+
     if tendencia > 1.0:
-        fatores.append("Tendência de desmatamento crescente (últimos 3 anos vs anteriores)")
+        fatores.append("Tendência de desmatamento crescente")
 
     return sub, fatores
-
 
 def _sub_score_terras_indigenas(dados: dict) -> tuple[float, list[str]]:
     """Sub-score 0-1 para terras indígenas — regra binária com piso."""
@@ -124,8 +127,8 @@ def _sub_score_terras_indigenas(dados: dict) -> tuple[float, list[str]]:
             nomes.append(s.get("nome", ""))
             area_ha = float(s.get("area_sobreposicao_ha") or 0)
             pct_sobreposicao_max = max(pct_sobreposicao_max, area_ha / 100)
-        sub = min(1.0, 0.6 + min(pct_sobreposicao_max * 0.4, 0.4))
-        fatores.append(f"Sobreposição com terra(s) indígena(s): {', '.join(nomes)}")
+            sub = min(1.0, 0.85 + min(pct_sobreposicao_max * 0.15, 0.15))
+            fatores.append(f"Sobreposição com terra(s) indígena(s): {', '.join(nomes)}")
         return sub, fatores
 
     if proximas:
@@ -236,18 +239,22 @@ def calcular_score_ahp(cruzamento: dict, area_fazenda_km2: float) -> dict:
 
     # Score final: soma ponderada (cada sub × peso_AHP) × 100
     score = sum(sub_scores_raw[c] * pesos[c] for c in CRITERIOS_ASG) * 100
+
+    # Aplicar limitação de score máximo primeiro
+    score = min(score, 100)
+
     nota = round(score)
 
     # Classificação
     if nota == 0:
         nivel = "sem_dados"
-    elif nota <= 20:
+    elif nota <= 15:
         nivel = "baixo"
-    elif nota <= 40:
+    elif nota <= 30:
         nivel = "moderado"
-    elif nota <= 60:
+    elif nota <= 50:
         nivel = "elevado"
-    elif nota <= 80:
+    elif nota <= 70:
         nivel = "alto"
     else:
         nivel = "critico"
@@ -261,7 +268,7 @@ def calcular_score_ahp(cruzamento: dict, area_fazenda_km2: float) -> dict:
     sub_scores_pct = {c: round(sub_scores_raw[c] * 100, 1) for c in CRITERIOS_ASG}
 
     return {
-        "nota": nota,
+       "nota": nota,
         "nivel": nivel,
         "fatores": fatores_todos,
         "por_dimensao": por_dimensao,

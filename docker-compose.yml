@@ -12,6 +12,33 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./asg_sistema/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asg_user -d asg_sp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      ASG_DB_HOST: db
+      ASG_DB_PORT: 5432
+      ASG_DB_NOME: asg_sp
+      ASG_DB_USUARIO: asg_user
+      ASG_DB_SENHA: asg_pass
+      ASG_ENV: development
+      EMAIL_USER: syncfatec6@gmail.com
+      EMAIL_PASS: hpvx katu fqqg dals
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
   pgdata:

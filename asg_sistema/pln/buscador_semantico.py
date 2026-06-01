@@ -16,6 +16,7 @@ class BuscadorSemantico:
 
         municipios = filtros.get("municipios", [])
         periodo = filtros.get("periodo", {})
+        status = filtros.get("status")  # Status da propriedade
 
         resultados = repositorio.busca_vetorial(
             embedding_str=embedding_str,
@@ -27,5 +28,6 @@ class BuscadorSemantico:
             data_fim=periodo.get("fim"),
             limite=top_k,
             cod_imovel=filtros.get("cod_imovel"),
+            status=status,  # Passa status para filtro
         )
         return resultados

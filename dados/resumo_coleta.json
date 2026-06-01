@@ -1,33 +1,15 @@
 {
   "titulo": "Coleta de Dados ASG - Estado de São Paulo",
-  "data_execucao": "2026-05-03T21:12:15.715129",
+  "data_execucao": "2026-05-25T23:05:03.509619",
   "fontes": [
     {
-      "fonte": "INPE/Queimadas - Focos de Incêndio",
-      "registros": 7472,
-      "status": "OK",
-      "duracao_segundos": 32.4
-    },
-    {
-      "fonte": "INPE/DETER - Desmatamento Cerrado",
-      "registros": 38,
-      "status": "OK",
-      "duracao_segundos": 0.8
-    },
-    {
-      "fonte": "INPE/DETER - Desmatamento Amazônia",
+      "fonte": "FUNAI - Terras Indígenas",
       "registros": 0,
-      "status": "OK",
-      "duracao_segundos": 2.3
-    },
-    {
-      "fonte": "INPE/PRODES - Desmatamento Anual",
-      "registros": 50000,
-      "status": "OK",
-      "duracao_segundos": 17.2
+      "status": "FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "duracao_segundos": 1.2
     }
   ],
-  "total_geral": 57510,
+  "total_geral": 0,
   "arquivos_gerados": [
     "unidades_conservacao_sp.json",
     "resumo_coleta.json",

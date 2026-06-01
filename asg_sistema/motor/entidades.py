@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 
 
 MAPA_PERIODOS = {
@@ -33,7 +34,10 @@ class ExtratorEntidades:
     def extrair(self, texto: str) -> dict:
         municipios = self._extrair_municipios(texto)
         periodo = self._extrair_periodo(texto)
+        status = self._extrair_status(texto)
         out: dict = {"municipios": municipios, "periodo": periodo}
+        if status:
+            out["status"] = status
         # Extração do outro dev (cod_imovel único)
         cod = extrair_cod_imovel_do_texto(texto)
         if cod:
@@ -48,11 +52,32 @@ class ExtratorEntidades:
 
     def _extrair_municipios(self, texto: str) -> list[str]:
         texto_lower = texto.lower()
-        encontrados = []
+        encontrados: list[str] = []
+
+        consumidos: list[str] = []
         for chave, nome_original in self.municipios_norm.items():
             if len(chave) >= 4 and chave in texto_lower:
                 if nome_original not in encontrados:
                     encontrados.append(nome_original)
+                consumidos.append(chave)
+
+        tokens = re.findall(r"\b[\wÀ-ÿ]{5,}\b", texto_lower)
+        for tok in tokens:
+            tok_norm = _remover_acentos(tok)
+            if any(tok_norm in c or c in tok_norm for c in consumidos):
+                continue
+            melhor_nome = None
+            melhor_score = 0.0
+            for chave, nome_original in self.municipios_norm.items():
+                if abs(len(chave) - len(tok_norm)) > 3:
+                    continue
+                score = SequenceMatcher(None, tok_norm, chave).ratio()
+                if score > melhor_score:
+                    melhor_score = score
+                    melhor_nome = nome_original
+            if melhor_nome and melhor_score >= 0.85 and melhor_nome not in encontrados:
+                encontrados.append(melhor_nome)
+
         return encontrados
 
     def _extrair_codigos_car(self, texto: str) -> list[str]:
@@ -87,6 +112,20 @@ class ExtratorEntidades:
             }
 
         return {}
+
+    def _extrair_status(self, texto: str) -> str | None:
+        """Extrai status da propriedade (ativo, pendente, suspenso, cancelado)."""
+        texto_lower = texto.lower()
+        status_map = {
+            r"\b(?:ativo|ativas)\b": "AT",
+            r"\b(?:pendente|pendentes)\b": "PE",
+            r"\b(?:suspenso|suspensos|suspensa|suspensas)\b": "SU",
+            r"\b(?:cancelado|cancelados|cancelada|canceladas)\b": "CA",
+        }
+        for padrao, codigo in status_map.items():
+            if re.search(padrao, texto_lower):
+                return codigo
+        return None
 
 
 def _remover_acentos(texto: str) -> str:

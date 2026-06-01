@@ -10,20 +10,23 @@ import uuid
 from pathlib import Path
 import time
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from asg_sistema.api.etl_cooldown import (
     assegurar_cooldown_disparo_etl_api,
     registrar_disparo_etl_api
 )
+from asg_sistema.auth.deps import exigir_admin
 from asg_sistema.db import repositorio
+from asg_sistema.db.models import Usuario
 
 router = APIRouter()
 
 pipeline_status = {
     "rodando": False,
     "inicio_execucao": 0.0,
+    "inicio_execucao_timestamp": None,
     "etapa": None,
     "entidades": [],
     "log_arquivo": None,
@@ -136,6 +139,16 @@ def status_etl():
     }
 
 
+@router.post("/debug/reset-status")
+def debug_reset_pipeline_status():
+    """[DEBUG] Reseta o status do pipeline. Apenas para uso em desenvolvimento/troubleshooting."""
+    global pipeline_status
+    pipeline_status["rodando"] = False
+    pipeline_status["inicio_execucao_timestamp"] = None
+    pipeline_status["log_arquivo"] = None
+    return {"status": "reset", "pipeline_status": pipeline_status}
+
+
 @router.get("/historico")
 def historico_etl():
     """Retorna o histórico das execuções do pipeline ETL com metadados de filtros."""
@@ -176,19 +189,28 @@ def executar_etl_api(
     background_tasks: BackgroundTasks, 
     etapa: EtapaETL = Query(default=EtapaETL.full, description="Escolha a etapa do pipeline"),
     entidades: list[EntidadeETL] = Query(default=[EntidadeETL.tudo], description="Escolha as entidades para processar"),
-    skip_sicar: bool = Query(default=False, description="Skip SICAR collection")
+    skip_sicar: bool = Query(default=False, description="Skip SICAR collection"),
 ):
-    """Dispara execução do pipeline ETL via API."""
+    """Dispara execução do pipeline ETL via API. Pode ser chamado pelo frontend (autenticado) ou agendador interno."""
     global pipeline_status
 
+    # Se "rodando" há mais de 5 minutos (300s), considerar que travou e permitir novo disparo
+    agora = time.time()
     if pipeline_status["rodando"]:
-        raise HTTPException(
-            status_code=409, 
-            detail="Um pipeline já está em execução neste momento. Tente novamente mais tarde."
-        )
+        inicio = pipeline_status.get("inicio_execucao_timestamp", agora)
+        tempo_decorrido = agora - inicio
+        if tempo_decorrido > 300:  # 5 minutos
+            print(f"[AVISO] Pipeline estava marcado como rodando há {tempo_decorrido}s. Resetando...")
+            pipeline_status["rodando"] = False
+        else:
+            raise HTTPException(
+                status_code=409, 
+                detail="Um pipeline já está em execução neste momento. Tente novamente mais tarde."
+            )
 
     pipeline_status["rodando"] = True
     pipeline_status["inicio_execucao"] = datetime.now().isoformat()
+    pipeline_status["inicio_execucao_timestamp"] = time.time()
     pipeline_status["etapa"] = etapa.value
     pipeline_status["entidades"] = [e.value for e in entidades]
 
@@ -269,10 +291,13 @@ def executar_etl_api(
         except Exception as e:
             print(f"[ERRO] Falha inesperada no worker do ETL: {e}")
         finally:
+            print(f"[DEBUG] finally block: resetting pipeline_status (estava rodando={pipeline_status['rodando']})")
             pipeline_status["rodando"] = False
+            pipeline_status["inicio_execucao_timestamp"] = None
             pipeline_status["log_arquivo"] = None
             _pipeline_cancelado = False
             current_process = None
+            print("[DEBUG] finally block: pipeline_status resetado com sucesso")
 
     background_tasks.add_task(_rodar_pipeline)
     registrar_disparo_etl_api()

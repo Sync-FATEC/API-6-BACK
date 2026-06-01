@@ -9,6 +9,7 @@ Estratégia:
 """
 
 from asg_sistema.motor.planner import ExecutionPlan
+from asg_sistema.motor.qgis_url import construir_qgis_url
 
 
 _META_KEYS = ("_sub", "_raw_resultados", "_raw_resultados_geo", "_erro")
@@ -26,7 +27,9 @@ def agregar(
 
     # Single sub → volta direto, preservando formato original (sem grupos).
     if len(parciais) == 1:
-        return _limpar_parcial(parciais[0], pergunta, plano)
+        clean = _limpar_parcial(parciais[0], pergunta, plano)
+        _injetar_qgis_url(clean, plano, entidades_base, pergunta_fallback=pergunta)
+        return clean
 
     # Multi-sub: separa CAR das subconsultas de busca.
     car_parciais = [p for p in parciais if (p.get("_sub") or {}).get("cod_imovel")]
@@ -56,9 +59,19 @@ def agregar(
     _mesclar_car_no_topo(consolidada, car_parciais)
 
     grupos = [_parcial_para_grupo(p) for p in parciais if p.get("_sub")]
+    # Em fanout de resumo_municipal, temas sem registros viram ruído visual —
+    # o usuário pediu "situação", não um checklist de fontes vazias.
+    if plano.intencao_principal == "resumo_municipal":
+        grupos = [g for g in grupos if (g.get("total_resultados") or 0) > 0]
     consolidada["grupos"] = grupos
     consolidada["eixo_agrupamento"] = plano.eixo_agrupamento
-    consolidada["intencoes_detectadas"] = plano.intencoes_detectadas
+    if plano.intencao_principal == "resumo_municipal":
+        intents_com_dados = {g["filtros"]["intencao"] for g in grupos}
+        consolidada["intencoes_detectadas"] = [
+            d for d in plano.intencoes_detectadas if d["intencao"] in intents_com_dados
+        ]
+    else:
+        consolidada["intencoes_detectadas"] = plano.intencoes_detectadas
 
     resumo_comparativo = _montar_resumo_comparativo(plano, grupos, consolidada)
     if resumo_comparativo:
@@ -67,7 +80,37 @@ def agregar(
         if isinstance(exp, dict) and isinstance(exp.get("resumo"), dict):
             exp["resumo"]["texto"] = resumo_comparativo
 
+    _injetar_qgis_url(consolidada, plano, entidades_base, pergunta_fallback=pergunta)
     return consolidada
+
+
+def _injetar_qgis_url(
+    resposta: dict,
+    plano: ExecutionPlan,
+    entidades_base: dict,
+    pergunta_fallback: str = "",
+) -> None:
+    from asg_sistema.config import Configuracao
+    
+    pergunta = resposta.get("pergunta") or pergunta_fallback
+    if not pergunta:
+        return
+
+    entidades = dict(entidades_base or {})
+    entidades_resposta = resposta.get("entidades") or {}
+    if isinstance(entidades_resposta, dict):
+        for k, v in entidades_resposta.items():
+            entidades.setdefault(k, v)
+
+    config = Configuracao()
+    url = construir_qgis_url(
+        plano.intencao_principal,
+        entidades,
+        base_url=config.get_api_url(),
+        pergunta=pergunta,
+    )
+    if url:
+        resposta["qgis_url"] = url
 
 
 def _limpar_parcial(parcial: dict, pergunta: str, plano: ExecutionPlan) -> dict:
@@ -151,18 +194,35 @@ def _montar_resumo_comparativo(
     if not grupos:
         return None
 
-    eixo = plano.eixo_agrupamento
     total_geral = consolidada.get("total_resultados", 0)
 
+    # resumo_municipal: o card de grupos já mostra breakdown completo,
+    # então o resumo top-level vira só um header curto pra não duplicar.
+    if plano.intencao_principal == "resumo_municipal":
+        municipio = _municipio_do_plano(plano)
+        local = f" em {municipio}" if municipio else ""
+        n_temas = len(grupos)
+        if total_geral == 0:
+            return f"Nenhum registro encontrado{local}."
+        return (
+            f"Situação{local}: {total_geral} registros em "
+            f"{n_temas} {'tema' if n_temas == 1 else 'temas'}."
+        )
+
+    eixo = plano.eixo_agrupamento
     partes = []
     for g in grupos:
         rotulo = g.get("rotulo") or ""
         total = g.get("total_resultados", 0)
         nr = g.get("nota_risco") or {}
-        nota = nr.get("nota", 0)
         nivel = nr.get("nivel", "sem_dados")
+        nota = nr.get("nota", 0)
+        # Só inclui risco quando há dado de risco real — evita "(risco sem_dados, nota 0)".
         if total > 0:
-            partes.append(f"{rotulo}: {total} registros (risco {nivel}, nota {nota})")
+            if nivel and nivel != "sem_dados":
+                partes.append(f"{rotulo}: {total} registros (risco {nivel}, nota {nota})")
+            else:
+                partes.append(f"{rotulo}: {total} registros")
         else:
             partes.append(f"{rotulo}: sem registros")
 
@@ -176,6 +236,13 @@ def _montar_resumo_comparativo(
     }.get(eixo, "Comparativo")
 
     return f"{introducao} — " + "; ".join(partes) + f". Total consolidado: {total_geral}."
+
+
+def _municipio_do_plano(plano: ExecutionPlan) -> str | None:
+    for sub in plano.subconsultas:
+        if sub.municipio:
+            return sub.municipio
+    return None
 
 
 def _resposta_vazia(pergunta: str, plano: ExecutionPlan) -> dict:

@@ -17,10 +17,12 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_fazenda, rotas_geo, rotas_pipeline, rotas_dashboard
+from asg_sistema.api import rotas_banco, rotas_consulta, rotas_dados, rotas_fazenda, rotas_geo, rotas_historico, rotas_pipeline, rotas_dashboard, rotas_sentinel
+from asg_sistema.auth.middleware_autenticacao import MiddlewareAutenticacao
 from asg_sistema.db.conexao import SessionLocal, engine
 from asg_sistema.db.models import AgendamentoAtualizacao, Base
 from asg_sistema.routers.agendamento_router import router as agendamento_router
+from asg_sistema.routers.auth_router import router as auth_router
 from asg_sistema.scheduler.gerenciador import (
     encerrar_scheduler,
     iniciar_scheduler,
@@ -36,10 +38,6 @@ pipeline_status = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Pré-carregando modelo NLP...")
-    rotas_consulta.obter_interpretador()
-    logger.info("Modelo NLP pronto. Primeira requisição será rápida.")
-
     Base.metadata.create_all(bind=engine)
     iniciar_scheduler()
 
@@ -58,7 +56,6 @@ async def lifespan(app: FastAPI):
     yield
     encerrar_scheduler()
 
-
 app = FastAPI(
     title="ASG SP - Análise Ambiental, Social e Governança",
     description="Sistema de consulta por linguagem natural a dados ASG do Estado de São Paulo",
@@ -66,6 +63,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(MiddlewareAutenticacao)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -74,24 +72,21 @@ app.add_middleware(
 )
 
 app.include_router(rotas_consulta.router, prefix="/api", tags=["Consulta"])
+app.include_router(rotas_historico.router, prefix="/api", tags=["Histórico"])
 app.include_router(rotas_banco.router, prefix="/api", tags=["Banco de dados"])
 app.include_router(rotas_dados.router, prefix="/api/dados", tags=["Dados"])
 app.include_router(rotas_geo.router, prefix="/api/geo", tags=["GeoJSON"])
 app.include_router(rotas_fazenda.router, prefix="/api/fazenda", tags=["Fazenda"])
 app.include_router(rotas_pipeline.router, prefix="/api/etl", tags=["Pipeline ETL"])
 app.include_router(rotas_dashboard.router, prefix="/api", tags=["Dashboard"])
+app.include_router(rotas_sentinel.router, prefix="/api/dados", tags=["Sentinel-2"])
 app.include_router(agendamento_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
 
 
 @app.get("/api/saude")
 def saude():
-    from asg_sistema.db import repositorio
-    try:
-        contagens = repositorio.contar_por_tabela()
-        return {"status": "ok", "contagens": contagens}
-    except Exception as e:
-        return {"status": "erro", "detalhe": str(e)}
-
+    return {"status": "ok"}
 
 def _entrada_historico_etl_valida(reg: dict) -> bool:
     """Descarta duplicata antiga: registro vazio com sucesso=true (bug do main() + salvar extra)."""
@@ -344,6 +339,14 @@ def executar_etl_api(
                 cwd=str(repo_root),
                 check=True
             )
+            script_treino = repo_root / "scripts" / "treinar_classificador.py"
+
+            if script_treino.exists():
+                subprocess.run(
+                    [sys.executable, str(script_treino)],
+                    cwd=str(repo_root),
+                    check=True
+                )
             _registrar_evento_status_etl(
                 execution_id,
                 "pipeline_subprocess_concluido",
@@ -351,6 +354,7 @@ def executar_etl_api(
                 etapa="pipeline",
             )
             print("[INFO] Pipeline ETL finalizado com sucesso pela API.")
+            
             
         except subprocess.CalledProcessError as e:
             detalhe = f"O subprocesso falhou com código {e.returncode}. Comando: {e.cmd}"

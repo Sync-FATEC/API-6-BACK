@@ -9,6 +9,7 @@ from asg_sistema.pln.buscador_semantico import BuscadorSemantico
 from asg_sistema.motor.entidades import ExtratorEntidades
 from asg_sistema.motor.gerador_resposta import GeradorResposta
 from asg_sistema.motor.planner import planejar, SubConsulta
+from asg_sistema.motor.normalizacao import normalizar_pergunta
 from asg_sistema.motor import executor as executor_mod
 from asg_sistema.motor import agregador as agregador_mod
 from asg_sistema.db import repositorio
@@ -41,8 +42,11 @@ KEYWORDS_INTENCAO = {
     "consultar_prodes": ["prodes"],
     "consultar_imovel_rural": [
         "fazenda", "fazendas", "sítio", "sitio", "chácara", "chacara",
-        "imovel rural", "imóvel rural", "cadastro ambiental", "sicar",
-        "codigo car", "código car", "propriedade rural",
+        "imovel rural", "imóvel rural", "cadastro ambiental", "sicar", "car",
+        "codigo car", "código car", "propriedade rural", "status",
+        "irregularidade", "irregularidades", "conformidade", "licença",
+        "validação", "validacao", "ativo", "inativo", "pendente", "suspenso", "cancelado",
+        "ativa", "ativas", "pendentes", "suspensos", "cancelados",
     ],
 }
 
@@ -86,6 +90,7 @@ class InterpretadorConsulta:
             "municipios": entidades.get("municipios", []),
             "periodo": entidades.get("periodo", {}),
             "cod_imovel": entidades.get("cod_imovel"),
+            "status": entidades.get("status"),  # Status da propriedade (AT, PE, SU, CA)
         }
 
     @staticmethod
@@ -115,6 +120,11 @@ class InterpretadorConsulta:
     def processar(self, pergunta: str, cod_imovel: str | None = None) -> dict:
         inicio = time.time()
 
+        # Normaliza typos comuns e apelidos de municipio antes de classificar.
+        # Mantemos a pergunta_original apenas para exibicao no historico/PDF.
+        pergunta_original = pergunta
+        pergunta = normalizar_pergunta(pergunta) or pergunta
+
         texto_clf = self._texto_para_classificacao(pergunta)
         preprocessado = self.preprocessador.preprocessar(pergunta)
         intencao, confianca = self.classificador.classificar(texto_clf)
@@ -142,6 +152,18 @@ class InterpretadorConsulta:
         elif any(kw in _texto_lower for kw in _kw_menor):
             intencao = "consultar_menor_risco"
             confianca = max(confianca, 0.95)
+
+        _kw_resumo = [
+            "situação de", "situação em",
+            "resumo", "panorama",
+            "como está", "como esta",
+            "informações sobre", "informacoes sobre",
+            "dados de", "dados sobre",
+            "tudo sobre",
+        ]
+        if entidades_pre.get("municipios") and any(kw in _texto_lower for kw in _kw_resumo):
+            intencao = "resumo_municipal"
+            confianca = max(confianca, 0.9)
 
         if confianca < 0.3 or intencao not in MAPA_INTENCAO_FONTE:
             ent_prev = {}
@@ -334,8 +356,15 @@ class InterpretadorConsulta:
         municipios = [sub.municipio] if sub.municipio else (entidades_base.get("municipios") or [])
         ordem_desc = sub.intencao == "consultar_maior_risco"
 
-        filtros = ["geom IS NOT NULL", "ind_status = 'AT'"]
+        filtros = ["geom IS NOT NULL"]
         params: dict = {}
+        
+        # Filtro por status (extrai da pergunta ou usa "ativo" como padrão)
+        status_filtro = sub.entidades(entidades_base).get("status") or "AT"
+        status_nome_map = {"AT": "Ativo", "PE": "Pendente", "SU": "Suspenso", "CA": "Cancelado"}
+        filtros.append(f"ind_status = '{status_filtro}'")
+        status_nome = status_nome_map.get(status_filtro, status_filtro)
+        
         if municipios:
             filtros.append("municipio ILIKE :municipio")
             params["municipio"] = f"%{municipios[0]}%"
@@ -363,7 +392,7 @@ class InterpretadorConsulta:
                 FROM sicar_imoveis
                 {where}
                 ORDER BY {sql_order}
-                LIMIT 30""",
+                LIMIT 500""",
             params,
         )
 
@@ -373,7 +402,7 @@ class InterpretadorConsulta:
                 "intencao_detectada": sub.intencao,
                 "confianca": round(sub.confianca, 3),
                 "entidades": {"municipios": municipios},
-                "resumo": f"Nenhuma fazenda ativa encontrada{local}.",
+                "resumo": f"Nenhuma fazenda com status {status_nome.lower()} encontrada{local}.",
                 "estatisticas": {},
                 "dados": [],
                 "fontes": [],
@@ -518,17 +547,8 @@ class InterpretadorConsulta:
                 if r["id"] not in ids_vistos_geo:
                     resultados_geo.append(r)
 
-            if not resultados:
-                filtros_sem_mun = {**filtros, "municipios": []}
-                resultados = self.buscador.buscar(
-                    texto_consulta=preprocessado["texto_limpo"],
-                    filtros=filtros_sem_mun, top_k=self.top_k,
-                )
-                resultados_geo = self.buscador.buscar(
-                    texto_consulta=preprocessado["texto_limpo"],
-                    filtros=filtros_sem_mun, top_k=1000,
-                )
-                entidades_resumo = {**entidades, "municipios": []}
+            # Sem fallback estadual: se o usuario filtrou por municipio e nao
+            # achou nada, o honesto eh retornar 0 e nao listar dados de SP inteiro.
 
         elif fontes_multiplas:
             metade = max(self.top_k // 2, 5)
@@ -577,19 +597,7 @@ class InterpretadorConsulta:
                 filtros=filtros, top_k=1000,
             )
 
-            if (
-                intencao == "consultar_unidade_conservacao"
-                and not resultados
-                and filtros.get("municipios")
-            ):
-                filtros_sem_mun = {**filtros, "municipios": []}
-                resultados = self.buscador.buscar(
-                    texto_consulta=preprocessado["texto_limpo"],
-                    filtros=filtros_sem_mun, top_k=self.top_k,
-                )
-                resultados_geo = self.buscador.buscar(
-                    texto_consulta=preprocessado["texto_limpo"],
-                    filtros=filtros_sem_mun, top_k=1000,
-                )
+            # Sem fallback estadual para UCs: mantemos a resposta honesta
+            # ("0 em X") em vez de listar UCs do estado inteiro.
 
         return resultados, resultados_geo, entidades_resumo

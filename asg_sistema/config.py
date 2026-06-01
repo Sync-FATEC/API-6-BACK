@@ -5,6 +5,7 @@ Carrega valores do arquivo .env sem necessidade de alterar codigo-fonte.
 from pathlib import Path
 
 from dotenv import load_dotenv
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -33,6 +34,48 @@ class Configuracao(BaseSettings):
     etl_retry_intervalo_segundos: int | None = None
     etl_retry_max_tentativas: int = 3
 
+    jwt_segredo: str
+    jwt_algoritmo: str = "HS256"
+    jwt_expiracao_minutos: int = 60 * 24
+
+    # ===========================================================
+    # TODO: Configurar variáveis abaixo para envio de e-mail.
+    # Crie uma senha de app no Google:
+    #   Conta Google > Segurança > Verificação em 2 etapas > Senhas de app
+    # Adicione ao .env:
+    #   ASG_EMAIL_REMETENTE=seu_email@gmail.com
+    #   ASG_EMAIL_SENHA_APP=xxxx xxxx xxxx xxxx   (senha de app de 16 dígitos)
+    # ===========================================================
+    email_remetente: str | None = None
+    email_senha_app: str | None = None
+    # URL base da API em produção — usada para gerar qgis_url nas respostas
+    api_url_production: str = "http://asg-backend-alb-85114170.us-east-1.elb.amazonaws.com"
+    # URL base do frontend em produção — usada no link de redefinição de senha enviado por e-mail
+    frontend_url_production: str = "https://asg-visiona.vercel.app"
+
+    def get_api_url(self) -> str:
+        """Retorna a URL base da API baseado no ambiente."""
+        if self.env == "production":
+            return self.api_url_production
+        return "http://localhost:8000"
+
+    def get_frontend_url(self) -> str:
+        """Retorna a URL base do frontend baseado no ambiente."""
+        if self.env == "production":
+            return self.frontend_url_production
+        return "http://localhost:3000"
+
+    @field_validator("jwt_segredo")
+    @classmethod
+    def jwt_segredo_nao_vazio(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError(
+                "Defina ASG_JWT_SEGREDO no .env (ou variável de ambiente); "
+                "use uma string longa e aleatória, nunca commite o valor real."
+            )
+        return s
+
     class Config:
         env_file = _ENV_FILE
         env_prefix = "ASG_"
@@ -59,7 +102,7 @@ class Configuracao(BaseSettings):
 
     @property
     def etl_api_cooldown_segundos(self) -> int:
-        return 3600 if self.env == "production" else 5
+        return 5 if self.env == "production" else 5
 
     @property
     def etl_retry_intervalo_erro_api_segundos(self) -> int:
@@ -67,7 +110,7 @@ class Configuracao(BaseSettings):
         if self.etl_retry_intervalo_segundos is not None:
             return self.etl_retry_intervalo_segundos
         # Em produção mantém 1 hora; em dev/testes reduz para 2 minutos.
-        return 3600 if self.env == "production" else 120
+        return 5 if self.env == "production" else 5
 
 
 config = Configuracao()

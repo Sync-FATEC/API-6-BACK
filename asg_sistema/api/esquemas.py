@@ -1,5 +1,7 @@
 """Schemas Pydantic para request/response da API."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +11,10 @@ class ConsultaRequest(BaseModel):
         default=None,
         max_length=260,
         description="Código CAR / cod_imovel (SICAR) do imóvel rural para contextualizar a consulta.",
+    )
+    conversa_id: int | None = Field(
+        default=None,
+        description="ID da conversa existente. Se não informado e houver autenticação, uma nova conversa é criada.",
     )
 
 
@@ -40,3 +46,7 @@ class ConsultaResponse(BaseModel):
     grupos: list[GrupoResposta] | None = None
     eixo_agrupamento: str | None = None
     intencoes_detectadas: list[dict] | None = None
+    conversa_id: int | None = None
+    mensagem_id: int | None = None
+    mensagem_enviada_em: datetime | None = None
+    mensagem_recebida_em: datetime | None = None

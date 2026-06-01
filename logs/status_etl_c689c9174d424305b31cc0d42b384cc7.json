@@ -1,0 +1,145 @@
+{
+  "execution_id": "c689c9174d424305b31cc0d42b384cc7",
+  "pipeline": "ETL ASG-SP",
+  "inicio": "2026-05-25T23:30:00.187244",
+  "atualizado_em": "2026-05-25T23:31:34.935091",
+  "etapa_atual": "transform_load",
+  "status_execucao": "em_andamento",
+  "finalizado": false,
+  "mensagem": "Iniciando etapa TRANSFORM + LOAD.",
+  "etapas": [
+    {
+      "etapa": "extract",
+      "status": "parcial",
+      "registros": 58709,
+      "duracao_segundos": 94.7,
+      "timestamp": "2026-05-25T23:31:34.933620"
+    }
+  ],
+  "erros": [
+    {
+      "etapa": "extract:FUNAI - Terras Indígenas",
+      "erro": "FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "timestamp": "2026-05-25T23:31:34.931593"
+    }
+  ],
+  "fontes": [
+    {
+      "fonte": "FUNAI - Terras Indígenas",
+      "status": "FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "registros": 0,
+      "duracao_segundos": 1.5,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "INPE/DETER - Desmatamento Cerrado",
+      "status": "OK",
+      "registros": 36,
+      "duracao_segundos": 1.4,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "INPE/DETER - Desmatamento Amazônia",
+      "status": "OK",
+      "registros": 0,
+      "duracao_segundos": 2.0,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "INPE/PRODES - Desmatamento Anual",
+      "status": "OK",
+      "registros": 50000,
+      "duracao_segundos": 17.5,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "INPE/Queimadas - Focos de Incêndio",
+      "status": "OK",
+      "registros": 8579,
+      "duracao_segundos": 24.8,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "MMA/ICMBio - Unidades de Conservação",
+      "status": "OK",
+      "registros": 42,
+      "duracao_segundos": 45.5,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "SICAR - Cadastro Ambiental Rural",
+      "status": "OK",
+      "registros": 0,
+      "duracao_segundos": 0.7,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    },
+    {
+      "fonte": "Palmares - Comunidades Quilombolas",
+      "status": "OK",
+      "registros": 52,
+      "duracao_segundos": 1.1,
+      "tentativas": 1,
+      "max_tentativas": 1,
+      "mensagem_final": null,
+      "historico_tentativas": []
+    }
+  ],
+  "eventos": [
+    {
+      "timestamp": "2026-05-25T23:30:00.188960",
+      "tipo": "pipeline_iniciado",
+      "mensagem": "Pipeline ETL iniciado."
+    },
+    {
+      "timestamp": "2026-05-25T23:30:00.189710",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa EXTRACT.",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-25T23:31:34.931780",
+      "tipo": "erro",
+      "mensagem": "Erro na etapa 'extract:FUNAI - Terras Indígenas': FALHA (PULADO): 502 Server Error: Bad Gateway for url: https://geoserver.funai.gov.br/geoserver/Funai/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=Funai%3Atis_poligonais&outputFormat=application%2Fjson&srsName=EPSG%3A4674&CQL_FILTER=uf_sigla%3D%27SP%27+OR+uf_sigla+LIKE+%27%25SP%25%27",
+      "etapa": "extract:FUNAI - Terras Indígenas"
+    },
+    {
+      "timestamp": "2026-05-25T23:31:34.932774",
+      "tipo": "extract_parcial",
+      "mensagem": "Extract finalizado com erro definitivo em 1 base(s).",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-25T23:31:34.934271",
+      "tipo": "extract_com_falhas",
+      "mensagem": "Extract retornou falhas e o pipeline seguira com os dados disponiveis.",
+      "etapa": "extract"
+    },
+    {
+      "timestamp": "2026-05-25T23:31:34.935089",
+      "tipo": "etapa_iniciada",
+      "mensagem": "Iniciando etapa TRANSFORM + LOAD.",
+      "etapa": "transform_load"
+    }
+  ]
+}
