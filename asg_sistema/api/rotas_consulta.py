@@ -5,6 +5,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from asg_sistema.api.esquemas import ConsultaRequest, ConsultaResponse
@@ -48,6 +49,20 @@ def obter_interpretador():
         buscador = BuscadorSemantico(extrator)
         gerador = GeradorResposta()
 
+        # Caminho analítico (Text-to-SQL local). Reusa o mesmo ExtratorCaracteristicas.
+        from asg_sistema.analitico.linker import SchemaLinker
+        from asg_sistema.analitico.slots import ExtratorSlots
+        from asg_sistema.analitico.motor import MotorAnalitico
+        from asg_sistema.db.conexao import executar_consulta_readonly, explain_readonly
+
+        linker = SchemaLinker(extrator)
+        slots = ExtratorSlots(linker=linker, extrator_entidades=extrator_entidades)
+        motor_analitico = MotorAnalitico(
+            extrator_slots=slots,
+            executor=executar_consulta_readonly,
+            explain=explain_readonly,
+        )
+
         _interpretador = InterpretadorConsulta(
             preprocessador=preprocessador,
             classificador=classificador,
@@ -55,6 +70,8 @@ def obter_interpretador():
             buscador=buscador,
             gerador=gerador,
             top_k=config.busca_top_k,
+            motor_analitico=motor_analitico,
+            roteador_linker=linker,
         )
     return _interpretador
 
@@ -122,6 +139,46 @@ def _salvar_historico(
     return conversa.id, msg_sistema.id, msg_usuario.criado_em, msg_sistema.criado_em
 
 
+class ConsultaAnaliticaRequest(BaseModel):
+    pergunta: str
+
+
+@router.post("/consulta-analitica")
+def consulta_analitica(req: ConsultaAnaliticaRequest):
+    """Caminho analítico (Text-to-SQL local) isolado, para validação/depuração."""
+    motor = obter_interpretador().motor_analitico
+    if motor is None:
+        return JSONResponse(
+            content={"erro": "motor analítico indisponível", "dados": [], "total_resultados": 0},
+            media_type="application/json; charset=utf-8",
+        )
+    resp = motor.consultar(req.pergunta)
+    return JSONResponse(
+        content=json.loads(json.dumps(resp, ensure_ascii=False, default=str)),
+        media_type="application/json; charset=utf-8",
+    )
+
+
+def _carregar_contexto(db: Session, conversa_id: int | None) -> dict | None:
+    """Lê o ir_contexto da última resposta do sistema na conversa (p/ follow-up)."""
+    if not conversa_id:
+        return None
+    try:
+        msg = (
+            db.query(Mensagem)
+            .filter(Mensagem.conversa_id == conversa_id, Mensagem.papel == "sistema")
+            .order_by(Mensagem.id.desc())
+            .first()
+        )
+        if not msg:
+            return None
+        dados = db.query(MensagemDados).filter(MensagemDados.mensagem_id == msg.id).first()
+        est = (dados.estatisticas if dados else None) or {}
+        return est.get("ir_contexto")
+    except Exception:
+        return None
+
+
 @router.post("/consulta")
 def consultar(
     req: ConsultaRequest,
@@ -138,7 +195,10 @@ def consultar(
     try:
         enviada_em = datetime.utcnow()
         interpretador = obter_interpretador()
-        resposta = interpretador.processar(req.pergunta, cod_imovel=req.cod_imovel)
+        contexto = _carregar_contexto(db, req.conversa_id)
+        resposta = interpretador.processar(
+            req.pergunta, cod_imovel=req.cod_imovel, contexto=contexto,
+        )
         recebida_em = datetime.utcnow()
 
         if usuario is not None:

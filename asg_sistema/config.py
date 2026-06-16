@@ -19,9 +19,20 @@ class Configuracao(BaseSettings):
     db_usuario: str = "asg_user"
     db_senha: str = "asg_pass"
 
-    modelo_spacy: str = "pt_core_news_sm"
+    modelo_spacy: str = "pt_core_news_md"
     modelo_embeddings: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     dimensao_embedding: int = 384
+
+    # ---- Caminho analítico (Text-to-SQL local) ----
+    sql_timeout_ms: int = 5000
+    sql_max_limit: int = 100
+    analitico_confianca_minima: float = 0.35
+    # Fallback generativo local (transformers). OFF por padrão (máquina modesta).
+    gerador_local_ativo: bool = False
+    gerador_local_modelo: str = "cssupport/t5-small-awesome-text-to-sql"
+    # Credenciais read-only (caem p/ as principais quando ausentes).
+    db_usuario_ro: str | None = None
+    db_senha_ro: str | None = None
 
     busca_top_k: int = 15
     confianca_minima: float = 0.3
@@ -79,11 +90,28 @@ class Configuracao(BaseSettings):
     class Config:
         env_file = _ENV_FILE
         env_prefix = "ASG_"
+        extra = "ignore"  # tolera chaves extras no .env (ex.: DATABASE_URL) sem quebrar
 
     @property
     def db_url(self) -> str:
         return (
             f"postgresql://{self.db_usuario}:{self.db_senha}"
+            f"@{self.db_host}:{self.db_port}/{self.db_nome}"
+            f"?client_encoding=utf8"
+        )
+
+    @property
+    def usuario_ro(self) -> str:
+        return self.db_usuario_ro or self.db_usuario
+
+    @property
+    def senha_ro(self) -> str:
+        return self.db_senha_ro or self.db_senha
+
+    @property
+    def db_url_readonly(self) -> str:
+        return (
+            f"postgresql://{self.usuario_ro}:{self.senha_ro}"
             f"@{self.db_host}:{self.db_port}/{self.db_nome}"
             f"?client_encoding=utf8"
         )

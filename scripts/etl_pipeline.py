@@ -699,6 +699,50 @@ def etapa_validacao(registro: RegistroETL) -> bool:
         return False
 
 
+def etapa_features(registro: RegistroETL) -> bool:
+    """(Re)constrói a feature store de propriedades + views analíticas.
+
+    Aplica o DDL (idempotente) das views e do fato e recalcula os sinais por imóvel.
+    Roda após a carga, para manter a camada analítica em sincronia com os dados.
+    """
+    logger.info("=" * 60)
+    logger.info("ETAPA: FEATURE STORE - Camada analitica (propriedades + views)")
+    logger.info("=" * 60)
+    inicio = time.time()
+    registro.atualizar_status(
+        mensagem="Construindo feature store de propriedades e views analiticas.",
+        etapa_atual="features",
+        status_execucao="em_andamento",
+    )
+    registro.registrar_evento("etapa_iniciada", "Iniciando etapa FEATURE STORE.", etapa="features")
+
+    try:
+        from sqlalchemy import text
+        from asg_sistema.db.conexao import engine
+        from asg_sistema.analitico.feature_store import construir_features
+
+        db_dir = Path(__file__).resolve().parent.parent / "asg_sistema" / "db"
+        for arquivo in ("schema_views.sql", "fato_propriedade.sql"):
+            sql = (db_dir / arquivo).read_text(encoding="utf-8")
+            with engine.begin() as conn:
+                conn.execute(text(sql))
+            logger.info("  DDL aplicado: %s", arquivo)
+
+        res = construir_features()
+        duracao = time.time() - inicio
+        logger.info("  Feature store: %d propriedades em %d municipios (%.1fs)",
+                    res["propriedades"], res["municipios"], duracao)
+        registro.registrar_evento("features_concluida", "Feature store reconstruida.", etapa="features")
+        registro.registrar_etapa("features", "sucesso", res["propriedades"], duracao)
+        return True
+
+    except Exception as e:
+        logger.error("Erro na feature store: %s", e)
+        registro.registrar_erro("features", str(e))
+        registro.registrar_evento("features_erro", f"Falha na feature store: {e}", etapa="features")
+        return False
+
+
 def pipeline_completo(etapa: str, entidades: list, execution_id: str | None = None):
     """Executa o pipeline ETL completo."""
     logger.info("=" * 60)
@@ -743,6 +787,9 @@ def pipeline_completo(etapa: str, entidades: list, execution_id: str | None = No
     if not ok_valid:
         registro.registrar_erro("validacao", "Um ou mais checks de validacao falharam.")
 
+    # Camada analítica: reconstrói a feature store após a carga dos dados.
+    etapa_features(registro)
+
     resultado = registro.salvar()
 
     logger.info("=" * 60)
@@ -768,7 +815,7 @@ def agendar(intervalo_horas: int):
 
 def main():
     parser = argparse.ArgumentParser(description="Pipeline ETL do Sistema ASG-SP")
-    parser.add_argument("--etapa", choices=["extract", "load", "embed", "validate", "full"], default="full",
+    parser.add_argument("--etapa", choices=["extract", "load", "embed", "validate", "features", "full"], default="full",
                         help="Etapa a executar (default: full)")
     parser.add_argument("--entidades", nargs="+", default=["tudo"], help="Entidades para processar")
     parser.add_argument("--agendar", type=int, metavar="HORAS",
@@ -818,7 +865,9 @@ def main():
         etapa_vetorizacao(registro)
     elif args.etapa == "validate":
         etapa_validacao(registro)
-    
+    elif args.etapa == "features":
+        etapa_features(registro)
+
     registro.salvar()
 
 

@@ -2,7 +2,8 @@
 
 import re
 from datetime import datetime, timedelta
-from difflib import SequenceMatcher
+
+from asg_sistema.analitico.texto import melhor_match
 
 
 MAPA_PERIODOS = {
@@ -26,6 +27,7 @@ MAPA_PERIODOS = {
 class ExtratorEntidades:
     def __init__(self, municipios: list[str]):
         self.municipios_norm = {}
+        self.municipios_originais = list(dict.fromkeys(municipios))
         for m in municipios:
             self.municipios_norm[m.lower().strip()] = m
             sem_acento = _remover_acentos(m.lower().strip())
@@ -66,17 +68,15 @@ class ExtratorEntidades:
             tok_norm = _remover_acentos(tok)
             if any(tok_norm in c or c in tok_norm for c in consumidos):
                 continue
-            melhor_nome = None
-            melhor_score = 0.0
-            for chave, nome_original in self.municipios_norm.items():
-                if abs(len(chave) - len(tok_norm)) > 3:
-                    continue
-                score = SequenceMatcher(None, tok_norm, chave).ratio()
-                if score > melhor_score:
-                    melhor_score = score
-                    melhor_nome = nome_original
-            if melhor_nome and melhor_score >= 0.85 and melhor_nome not in encontrados:
-                encontrados.append(melhor_nome)
+            # Fuzzy via RapidFuzz+Unidecode. Restringe a candidatos de tamanho
+            # comparável p/ evitar casar token curto com nome composto longo.
+            candidatos = [
+                m for m in self.municipios_originais
+                if abs(len(_remover_acentos(m.lower())) - len(tok_norm)) <= 3
+            ]
+            nome, score = melhor_match(tok, candidatos)
+            if nome and score >= 88 and nome not in encontrados:
+                encontrados.append(nome)
 
         return encontrados
 
@@ -88,6 +88,28 @@ class ExtratorEntidades:
 
     def _extrair_periodo(self, texto: str) -> dict:
         texto_lower = texto.lower()
+
+        # "últimos N anos/meses/dias/semanas" — respeita o número N e a unidade.
+        # Precisa vir ANTES do MAPA (que casaria "ano"/"mes" ignorando o número).
+        m_mu = re.search(
+            r"[úu]ltim[oa]s?\s+(\d{1,3})\s+(anos?|m[êe]s(?:es)?|dias?|semanas?)",
+            texto_lower,
+        )
+        if m_mu:
+            n = int(m_mu.group(1))
+            unidade = m_mu.group(2)
+            if unidade.startswith("ano"):
+                dias = n * 365
+            elif unidade.startswith("sem"):
+                dias = n * 7
+            elif unidade.startswith("dia"):
+                dias = n
+            else:  # mês/meses
+                dias = n * 30
+            fim = datetime.now()
+            inicio = fim - timedelta(days=dias)
+            return {"inicio": inicio.strftime("%Y-%m-%d"), "fim": fim.strftime("%Y-%m-%d")}
+
         for padrao, dias in MAPA_PERIODOS.items():
             if padrao in texto_lower:
                 fim = datetime.now()
@@ -117,7 +139,7 @@ class ExtratorEntidades:
         """Extrai status da propriedade (ativo, pendente, suspenso, cancelado)."""
         texto_lower = texto.lower()
         status_map = {
-            r"\b(?:ativo|ativas)\b": "AT",
+            r"\b(?:ativo|ativos|ativa|ativas)\b": "AT",
             r"\b(?:pendente|pendentes)\b": "PE",
             r"\b(?:suspenso|suspensos|suspensa|suspensas)\b": "SU",
             r"\b(?:cancelado|cancelados|cancelada|canceladas)\b": "CA",

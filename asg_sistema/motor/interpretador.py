@@ -60,6 +60,8 @@ class InterpretadorConsulta:
         buscador: BuscadorSemantico,
         gerador: GeradorResposta,
         top_k: int = 15,
+        motor_analitico=None,
+        roteador_linker=None,
     ):
         self.preprocessador = preprocessador
         self.classificador = classificador
@@ -67,6 +69,9 @@ class InterpretadorConsulta:
         self.buscador = buscador
         self.gerador = gerador
         self.top_k = top_k
+        # Caminho analítico (Text-to-SQL local). Opcionais: sem eles, fluxo atual intacto.
+        self.motor_analitico = motor_analitico
+        self.roteador_linker = roteador_linker
 
     @staticmethod
     def _texto_para_classificacao(pergunta: str) -> str:
@@ -117,13 +122,27 @@ class InterpretadorConsulta:
             },
         }
 
-    def processar(self, pergunta: str, cod_imovel: str | None = None) -> dict:
+    def processar(self, pergunta: str, cod_imovel: str | None = None,
+                  contexto: dict | None = None) -> dict:
         inicio = time.time()
 
         # Normaliza typos comuns e apelidos de municipio antes de classificar.
         # Mantemos a pergunta_original apenas para exibicao no historico/PDF.
         pergunta_original = pergunta
         pergunta = normalizar_pergunta(pergunta) or pergunta
+
+        # ----- Roteamento híbrido: perguntas analíticas -> Text-to-SQL local -----
+        if self.motor_analitico is not None:
+            from asg_sistema.analitico.roteador import rotear
+            rota = rotear(pergunta, cod_imovel=cod_imovel, linker=self.roteador_linker)
+            if rota in ("ANALITICA", "PROPRIEDADE", "LISTAGEM"):
+                resp = self.motor_analitico.consultar(pergunta, rota=rota, contexto=contexto)
+                if not resp.get("erro"):
+                    resp.setdefault("pergunta", pergunta)
+                    resp["tempo_processamento_ms"] = round((time.time() - inicio) * 1000, 1)
+                    resp.setdefault("preprocessamento", {})
+                    return resp
+                # analítico incerto/falho -> cai no fluxo atual (degradação graciosa)
 
         texto_clf = self._texto_para_classificacao(pergunta)
         preprocessado = self.preprocessador.preprocessar(pergunta)

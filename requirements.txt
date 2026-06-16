@@ -59,6 +59,7 @@ preshed==3.0.13
 psycopg2-binary==2.9.11
 python-jose[cryptography]==3.5.0
 pt_core_news_sm @ https://github.com/explosion/spacy-models/releases/download/pt_core_news_sm-3.8.0/pt_core_news_sm-3.8.0-py3-none-any.whl#sha256=c304fa04db3af73cd08a250feacf560506e15a2ec2469bd1b09f06847f6b455c
+pt_core_news_md @ https://github.com/explosion/spacy-models/releases/download/pt_core_news_md-3.8.0/pt_core_news_md-3.8.0-py3-none-any.whl
 pycparser==3.0
 pydantic==2.12.5
 pydantic-settings==2.13.1
@@ -75,6 +76,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 email-validator==2.3.0
 PyYAML==6.0.3
+rapidfuzz==3.14.5
 regex==2026.4.4
 requests==2.33.1
 rich==14.3.3
@@ -82,6 +84,7 @@ safetensors==0.7.0
 scikit-learn==1.8.0
 scipy==1.17.1
 sentence-transformers==5.3.0
+sqlglot==30.9.0
 setuptools==81.0.0
 shapely==2.1.2
 shellingham==1.5.4
@@ -108,6 +111,7 @@ typer==0.24.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 tzlocal==5.3.1
+Unidecode==1.4.0
 urllib3==2.6.3
 uvicorn==0.43.0
 uvloop==0.22.1; sys_platform != "win32"
